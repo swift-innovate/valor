@@ -35,3 +35,12 @@ export {
   appendAuditEntry,
   queryAuditLog,
 } from "./audit-repo.js";
+
+export {
+  createApproval,
+  resolveApproval,
+  getApproval,
+  getPendingApproval,
+  listApprovals,
+  type Approval,
+} from "./approval-repo.js";

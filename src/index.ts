@@ -12,6 +12,8 @@ import {
   createHerdAdapter,
 } from "./providers/index.js";
 import { getActiveSessions, stopHealthMonitor, startHealthMonitor } from "./stream/index.js";
+import { missionRoutes } from "./api/index.js";
+import { initOrchestratorListeners } from "./orchestrator/index.js";
 
 const app = new Hono();
 const startTime = Date.now();
@@ -34,6 +36,9 @@ app.get("/health", async (c) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Mission API
+app.route("/missions", missionRoutes);
 
 // Providers endpoint
 app.get("/providers", (c) => {
@@ -63,6 +68,9 @@ if (config.herdBaseUrl) {
     }),
   );
 }
+
+// Initialize orchestrator event listeners
+initOrchestratorListeners();
 
 // Start stream health monitor
 startHealthMonitor();

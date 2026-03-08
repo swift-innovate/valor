@@ -1,0 +1,149 @@
+import { Hono } from "hono";
+import {
+  createMission,
+  getMission,
+  listMissions,
+  transitionMission,
+  resolveApproval,
+  getPendingApproval,
+  listApprovals,
+} from "../db/index.js";
+import {
+  dispatchMission,
+  processAAR,
+  abortMission,
+} from "../orchestrator/index.js";
+import type { MissionStatus } from "../types/index.js";
+
+export const missionRoutes = new Hono();
+
+// List missions with optional filters
+missionRoutes.get("/", (c) => {
+  const status = c.req.query("status") as MissionStatus | undefined;
+  const division_id = c.req.query("division_id");
+  const assigned_agent_id = c.req.query("assigned_agent_id");
+
+  const missions = listMissions({ status, division_id, assigned_agent_id });
+  return c.json(missions);
+});
+
+// Get single mission
+missionRoutes.get("/:id", (c) => {
+  const mission = getMission(c.req.param("id"));
+  if (!mission) return c.json({ error: "Mission not found" }, 404);
+  return c.json(mission);
+});
+
+// Create mission
+missionRoutes.post("/", async (c) => {
+  const body = await c.req.json();
+
+  const mission = createMission({
+    division_id: body.division_id ?? null,
+    title: body.title,
+    objective: body.objective,
+    status: "draft",
+    phase: null,
+    assigned_agent_id: body.assigned_agent_id ?? null,
+    priority: body.priority ?? "normal",
+    constraints: body.constraints ?? [],
+    deliverables: body.deliverables ?? [],
+    success_criteria: body.success_criteria ?? [],
+    token_usage: null,
+    cost_usd: 0,
+    revision_count: 0,
+    max_revisions: body.max_revisions ?? 3,
+    parent_mission_id: body.parent_mission_id ?? null,
+    dispatched_at: null,
+    completed_at: null,
+  });
+
+  return c.json(mission, 201);
+});
+
+// Queue a draft mission for dispatch
+missionRoutes.post("/:id/queue", (c) => {
+  const mission = getMission(c.req.param("id"));
+  if (!mission) return c.json({ error: "Mission not found" }, 404);
+  if (mission.status !== "draft") {
+    return c.json({ error: `Cannot queue mission in "${mission.status}" status` }, 400);
+  }
+
+  transitionMission(mission.id, "queued");
+
+  return c.json(getMission(mission.id));
+});
+
+// Dispatch a mission (evaluate gates + send to provider)
+missionRoutes.post("/:id/dispatch", (c) => {
+  try {
+    const result = dispatchMission(c.req.param("id"));
+    const status = result.dispatched ? 200 : 202;
+    return c.json(result, status);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 400);
+  }
+});
+
+// Approve a pending approval
+missionRoutes.post("/:id/approve", async (c) => {
+  const missionId = c.req.param("id");
+  const body = await c.req.json().catch(() => ({}));
+
+  const pending = getPendingApproval(missionId);
+  if (!pending) return c.json({ error: "No pending approval for this mission" }, 404);
+
+  const resolved = resolveApproval(pending.id, {
+    status: "approved",
+    resolved_by: body.resolved_by ?? "director",
+    reason: body.reason,
+  });
+
+  return c.json(resolved);
+});
+
+// Reject a pending approval
+missionRoutes.post("/:id/reject", async (c) => {
+  const missionId = c.req.param("id");
+  const body = await c.req.json().catch(() => ({}));
+
+  const pending = getPendingApproval(missionId);
+  if (!pending) return c.json({ error: "No pending approval for this mission" }, 404);
+
+  const resolved = resolveApproval(pending.id, {
+    status: "rejected",
+    resolved_by: body.resolved_by ?? "director",
+    reason: body.reason,
+  });
+
+  return c.json(resolved);
+});
+
+// Process AAR (approve or reject the after-action review)
+missionRoutes.post("/:id/aar", async (c) => {
+  const body = await c.req.json();
+  try {
+    const mission = processAAR(c.req.param("id"), body.approved === true);
+    return c.json(mission);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+  }
+});
+
+// Abort a mission
+missionRoutes.post("/:id/abort", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const mission = abortMission(c.req.param("id"), body.reason ?? "Aborted by Director");
+    return c.json(mission);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+  }
+});
+
+// List approvals for a mission
+missionRoutes.get("/:id/approvals", (c) => {
+  const approvals = listApprovals({ mission_id: c.req.param("id") });
+  return c.json(approvals);
+});
