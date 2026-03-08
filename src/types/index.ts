@@ -8,3 +8,4 @@ export * from "./error.js";
 export * from "./gate.js";
 export * from "./sitrep.js";
 export * from "./wal.js";
+export * from "./vector.js";

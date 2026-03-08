@@ -12,8 +12,9 @@ import {
   createHerdAdapter,
 } from "./providers/index.js";
 import { getActiveSessions, stopHealthMonitor, startHealthMonitor } from "./stream/index.js";
-import { missionRoutes, divisionRoutes, agentRoutes, personaRoutes } from "./api/index.js";
+import { missionRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes } from "./api/index.js";
 import { initOrchestratorListeners } from "./orchestrator/index.js";
+import { seedDefaultOathRules } from "./vector/index.js";
 
 const app = new Hono();
 const startTime = Date.now();
@@ -42,6 +43,7 @@ app.route("/missions", missionRoutes);
 app.route("/divisions", divisionRoutes);
 app.route("/agents", agentRoutes);
 app.route("/personas", personaRoutes);
+app.route("/decisions", decisionRoutes);
 
 // Providers endpoint
 app.get("/providers", (c) => {
@@ -71,6 +73,9 @@ if (config.herdBaseUrl) {
     }),
   );
 }
+
+// Seed default oath rules
+seedDefaultOathRules();
 
 // Initialize orchestrator event listeners
 initOrchestratorListeners();

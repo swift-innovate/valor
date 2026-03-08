@@ -1,4 +1,6 @@
 import type { GateEvaluator } from "./types.js";
+import { checkOath } from "../vector/index.js";
+import { listDecisions, getAnalysisForDecision } from "../db/index.js";
 
 /** Gate 1: Mission must be in a dispatchable state. */
 export const missionStateGate: GateEvaluator = (ctx) => {
@@ -139,14 +141,92 @@ export const hilGate: GateEvaluator = (ctx) => {
   return { gate: "hil", verdict: "pass", reason: "No approval required", details: null };
 };
 
-/** Gate 9: Oath — constitutional checks. Placeholder for now. */
+/** Gate 9: Oath — constitutional constraint checks against active rules. */
 export const oathGate: GateEvaluator = (ctx) => {
-  // Future: check mission constraints against constitutional rules
-  return { gate: "oath", verdict: "pass", reason: "Oath checks passed", details: null };
+  try {
+    const result = checkOath(ctx.mission);
+    if (result.passed) {
+      return { gate: "oath", verdict: "pass", reason: "All oath rules satisfied", details: null };
+    }
+
+    // Layer 0 violations are absolute blocks
+    const layer0 = result.violations.filter((v) => v.layer === 0);
+    if (layer0.length > 0) {
+      return {
+        gate: "oath",
+        verdict: "block",
+        reason: `Constitutional violation: ${layer0[0].rule_name}`,
+        details: { violations: result.violations },
+      };
+    }
+
+    // Layer 1-2 violations escalate for Director review
+    return {
+      gate: "oath",
+      verdict: "escalate",
+      reason: `Oath concern: ${result.violations[0].rule_name}`,
+      details: { violations: result.violations },
+    };
+  } catch {
+    // If oath checking fails (e.g., no rules seeded), pass through
+    return { gate: "oath", verdict: "pass", reason: "Oath check unavailable — passing", details: null };
+  }
 };
 
-/** Gate 10: VECTOR checkpoint — decision framework. Placeholder for now. */
+/** Gate 10: VECTOR checkpoint — checks if high-stakes missions have been analyzed. */
 export const vectorCheckpointGate: GateEvaluator = (ctx) => {
-  // Future: VECTOR method evaluation at decision checkpoints
-  return { gate: "vector_checkpoint", verdict: "pass", reason: "VECTOR checkpoint passed", details: null };
+  // Only enforce for missions linked to decisions
+  const decisions = listDecisions({ mission_id: ctx.mission.id });
+  if (decisions.length === 0) {
+    // No decision linked — pass (VECTOR is opt-in per mission)
+    return { gate: "vector_checkpoint", verdict: "pass", reason: "No decision linked to mission", details: null };
+  }
+
+  // Check if the latest decision has been analyzed
+  const latestDecision = decisions[0];
+  const analysis = getAnalysisForDecision(latestDecision.id);
+
+  if (!analysis) {
+    // Decision exists but no analysis — block high-stakes, downgrade others
+    if (latestDecision.stakes === "high") {
+      return {
+        gate: "vector_checkpoint",
+        verdict: "block",
+        reason: "High-stakes decision requires VECTOR analysis before dispatch",
+        details: { decision_id: latestDecision.id, stakes: latestDecision.stakes },
+      };
+    }
+    return {
+      gate: "vector_checkpoint",
+      verdict: "downgrade",
+      reason: "Decision awaiting VECTOR analysis",
+      details: { decision_id: latestDecision.id },
+    };
+  }
+
+  // Analysis exists — check recommendation
+  if (analysis.recommendation === "abort") {
+    return {
+      gate: "vector_checkpoint",
+      verdict: "block",
+      reason: `VECTOR analysis recommends abort (risk: ${analysis.total_risk_score}/50)`,
+      details: { decision_id: latestDecision.id, recommendation: analysis.recommendation, risk: analysis.total_risk_score },
+    };
+  }
+
+  if (analysis.recommendation === "reconsider") {
+    return {
+      gate: "vector_checkpoint",
+      verdict: "escalate",
+      reason: `VECTOR analysis recommends reconsideration (risk: ${analysis.total_risk_score}/50)`,
+      details: { decision_id: latestDecision.id, recommendation: analysis.recommendation, risk: analysis.total_risk_score },
+    };
+  }
+
+  return {
+    gate: "vector_checkpoint",
+    verdict: "pass",
+    reason: `VECTOR: ${analysis.recommendation} (risk: ${analysis.total_risk_score}/50)`,
+    details: { decision_id: latestDecision.id, recommendation: analysis.recommendation, risk: analysis.total_risk_score },
+  };
 };

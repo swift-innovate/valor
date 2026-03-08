@@ -53,3 +53,15 @@ export {
   updatePersona,
   deletePersona,
 } from "./persona-repo.js";
+
+export {
+  createDecision,
+  getDecision,
+  listDecisions,
+  createAnalysis,
+  getAnalysis,
+  getAnalysisForDecision,
+  listAnalyses,
+  createOathRule,
+  listOathRules,
+} from "./decision-repo.js";
