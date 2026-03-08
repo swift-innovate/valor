@@ -13,7 +13,7 @@ import {
   createHerdAdapter,
 } from "./providers/index.js";
 import { getActiveSessions, stopHealthMonitor, startHealthMonitor } from "./stream/index.js";
-import { missionRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes } from "./api/index.js";
+import { missionRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes, sitrepRoutes } from "./api/index.js";
 import { dashboardRoutes } from "./dashboard/index.js";
 import { attachWebSocket, closeWebSocket } from "./ws/index.js";
 import { initOrchestratorListeners } from "./orchestrator/index.js";
@@ -47,6 +47,7 @@ app.route("/divisions", divisionRoutes);
 app.route("/agents", agentRoutes);
 app.route("/personas", personaRoutes);
 app.route("/decisions", decisionRoutes);
+app.route("/sitreps", sitrepRoutes);
 
 // Dashboard
 app.route("/dashboard", dashboardRoutes);

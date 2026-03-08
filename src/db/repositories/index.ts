@@ -55,6 +55,13 @@ export {
 } from "./persona-repo.js";
 
 export {
+  createSitrep,
+  getSitrep,
+  listSitreps,
+  getLatestSitrep,
+} from "./sitrep-repo.js";
+
+export {
   createDecision,
   getDecision,
   listDecisions,

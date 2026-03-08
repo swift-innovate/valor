@@ -264,6 +264,97 @@ Query available personas: `GET /personas` or `GET /personas/callsign/<your-calls
 
 ---
 
+## Step 6: Report Sitreps
+
+When working on a mission, report your status back to the engine:
+
+```http
+POST /sitreps
+Content-Type: application/json
+
+{
+  "mission_id": "<mission-id>",
+  "agent_id": "<your-agent-id>",
+  "phase": "A",
+  "status": "green",
+  "summary": "Completed initial analysis, proceeding to implementation",
+  "objectives_complete": ["Research phase complete"],
+  "objectives_pending": ["Write implementation", "Run tests"],
+  "blockers": [],
+  "learnings": ["Found existing utility that simplifies the approach"],
+  "confidence": "high",
+  "tokens_used": 1500,
+  "delivered_to": []
+}
+```
+
+### Sitrep Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `mission_id` | string | yes | The mission you're reporting on |
+| `agent_id` | string | yes | Your agent ID |
+| `phase` | enum | yes | VALOR phase: `V` (Validate), `A` (Act), `L` (Learn), `O` (Optimize), `R` (Report) |
+| `status` | enum | yes | `green` (on track), `yellow` (at risk), `red` (blocked), `hold` (paused), `escalated` (needs Director) |
+| `summary` | string | yes | Human-readable status update |
+| `objectives_complete` | string[] | no | What you've finished |
+| `objectives_pending` | string[] | no | What remains |
+| `blockers` | string[] | no | What's preventing progress |
+| `learnings` | string[] | no | Insights discovered during work |
+| `confidence` | enum | no | `high`, `medium`, `low`, `conflicting` (default: `medium`) |
+| `tokens_used` | number | no | Token consumption so far (default: `0`) |
+
+**When to send sitreps:**
+- After completing each VALOR phase
+- When status changes (e.g., green → yellow)
+- When encountering blockers
+- On mission completion
+
+**Escalation:** Setting `status` to `escalated` automatically notifies the Director via the event bus.
+
+### Query sitreps
+
+```http
+GET /sitreps?mission_id=<id>           # All sitreps for a mission
+GET /sitreps?agent_id=<id>             # All your sitreps
+GET /sitreps/mission/<id>/latest       # Latest sitrep for a mission
+```
+
+---
+
+## Receiving Mission Dispatches (Webhook)
+
+If you registered with an `endpoint_url`, the engine will POST mission briefs directly to you:
+
+```json
+{
+  "type": "mission.dispatch",
+  "mission_id": "mis_abc123...",
+  "mission": {
+    "id": "mis_abc123...",
+    "title": "Refactor auth layer",
+    "objective": "Simplify the authentication middleware",
+    "priority": "high",
+    "constraints": ["No downtime"],
+    "deliverables": ["Updated auth module"],
+    "success_criteria": ["All tests pass"],
+    "max_revisions": 3
+  },
+  "callback_url": "http://localhost:3200/agents/<your-id>/sitrep",
+  "timestamp": "2026-03-08T22:00:00.000Z"
+}
+```
+
+Headers included:
+- `X-VALOR-Source: engine`
+- `X-VALOR-Mission-ID: <mission-id>`
+
+Your endpoint should return `200` to acknowledge receipt. Then begin work and report sitreps to the `callback_url`.
+
+If you don't have an `endpoint_url`, poll `GET /agents/<id>/missions` for new dispatched missions.
+
+---
+
 ## Full API Reference
 
 | Method | Endpoint | Purpose |
@@ -274,6 +365,9 @@ Query available personas: `GET /personas` or `GET /personas/callsign/<your-calls
 | `POST /agents/<id>/heartbeat` | Send heartbeat |
 | `GET /agents/<id>/missions` | List your missions |
 | `PUT /agents/<id>/persona` | Attach a persona |
+| `POST /sitreps` | Report mission status |
+| `GET /sitreps?mission_id=<id>` | Query sitreps for a mission |
+| `GET /sitreps/mission/<id>/latest` | Get latest sitrep |
 | `GET /divisions` | List available divisions |
 | `GET /personas` | List available personas |
 | `GET /health` | Check engine health |
