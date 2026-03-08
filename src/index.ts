@@ -12,7 +12,7 @@ import {
   createHerdAdapter,
 } from "./providers/index.js";
 import { getActiveSessions, stopHealthMonitor, startHealthMonitor } from "./stream/index.js";
-import { missionRoutes } from "./api/index.js";
+import { missionRoutes, divisionRoutes, agentRoutes, personaRoutes } from "./api/index.js";
 import { initOrchestratorListeners } from "./orchestrator/index.js";
 
 const app = new Hono();
@@ -37,8 +37,11 @@ app.get("/health", async (c) => {
   });
 });
 
-// Mission API
+// API routes
 app.route("/missions", missionRoutes);
+app.route("/divisions", divisionRoutes);
+app.route("/agents", agentRoutes);
+app.route("/personas", personaRoutes);
 
 // Providers endpoint
 app.get("/providers", (c) => {

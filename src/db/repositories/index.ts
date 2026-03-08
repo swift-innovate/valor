@@ -44,3 +44,12 @@ export {
   listApprovals,
   type Approval,
 } from "./approval-repo.js";
+
+export {
+  createPersona,
+  getPersona,
+  getPersonaByCallsign,
+  listPersonas,
+  updatePersona,
+  deletePersona,
+} from "./persona-repo.js";

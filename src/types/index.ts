@@ -1,6 +1,7 @@
 export * from "./mission.js";
 export * from "./agent.js";
 export * from "./division.js";
+export * from "./persona.js";
 export * from "./event.js";
 export * from "./stream.js";
 export * from "./error.js";
