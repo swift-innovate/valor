@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
+import type { Server } from "http";
 import { config } from "./config.js";
 import { logger } from "./utils/logger.js";
 import { runMigrations, closeDb } from "./db/index.js";
@@ -13,6 +14,8 @@ import {
 } from "./providers/index.js";
 import { getActiveSessions, stopHealthMonitor, startHealthMonitor } from "./stream/index.js";
 import { missionRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes } from "./api/index.js";
+import { dashboardRoutes } from "./dashboard/index.js";
+import { attachWebSocket, closeWebSocket } from "./ws/index.js";
 import { initOrchestratorListeners } from "./orchestrator/index.js";
 import { seedDefaultOathRules } from "./vector/index.js";
 
@@ -44,6 +47,9 @@ app.route("/divisions", divisionRoutes);
 app.route("/agents", agentRoutes);
 app.route("/personas", personaRoutes);
 app.route("/decisions", decisionRoutes);
+
+// Dashboard
+app.route("/dashboard", dashboardRoutes);
 
 // Providers endpoint
 app.get("/providers", (c) => {
@@ -90,9 +96,13 @@ const server = serve({ fetch: app.fetch, port: config.port }, () => {
   });
 });
 
+// Attach WebSocket server for dashboard live updates
+attachWebSocket(server as unknown as Server);
+
 // Graceful shutdown
 function shutdown() {
   logger.info("Shutting down...");
+  closeWebSocket();
   stopHealthMonitor();
   server.close();
   closeDb();
