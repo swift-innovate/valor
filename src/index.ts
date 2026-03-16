@@ -18,6 +18,7 @@ import { dashboardRoutes } from "./dashboard/index.js";
 import { attachWebSocket, closeWebSocket } from "./ws/index.js";
 import { initOrchestratorListeners } from "./orchestrator/index.js";
 import { seedDefaultOathRules } from "./vector/index.js";
+import { registerSigintOutcomeCallback } from "./callbacks/sigint-outcome.js";
 
 const app = new Hono();
 const startTime = Date.now();
@@ -86,6 +87,7 @@ seedDefaultOathRules();
 
 // Initialize orchestrator event listeners
 initOrchestratorListeners();
+registerSigintOutcomeCallback();
 
 // Start stream health monitor
 startHealthMonitor();
