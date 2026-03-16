@@ -1,8 +1,8 @@
-import { nanoid } from "nanoid";
 import { getDb } from "../db/database.js";
 import { logger } from "../utils/logger.js";
 import { publish } from "../bus/index.js";
-import type { GateContext, GateEvalResult } from "./types.js";
+import { config } from "../config.js";
+import type { GateContext, GateEvalResult, GateEvaluator } from "./types.js";
 import {
   missionStateGate,
   convergenceGate,
@@ -16,17 +16,17 @@ import {
   vectorCheckpointGate,
 } from "./evaluators.js";
 
-const ALL_GATES = [
-  missionStateGate,
-  convergenceGate,
-  revisionCapGate,
-  healthGate,
-  artifactIntegrityGate,
-  budgetGate,
-  concurrencyGate,
-  hilGate,
-  oathGate,
-  vectorCheckpointGate,
+const ALL_GATES: Array<[string, GateEvaluator]> = [
+  ["mission_state", missionStateGate],
+  ["convergence", convergenceGate],
+  ["revision_cap", revisionCapGate],
+  ["health", healthGate],
+  ["artifact_integrity", artifactIntegrityGate],
+  ["budget", budgetGate],
+  ["concurrency", concurrencyGate],
+  ["hil", hilGate],
+  ["oath", oathGate],
+  ["vector_checkpoint", vectorCheckpointGate],
 ];
 
 export interface GateRunResult {
@@ -43,7 +43,9 @@ export function evaluateGates(ctx: GateContext): GateRunResult {
   const escalations: GateEvalResult[] = [];
   const downgrades: GateEvalResult[] = [];
 
-  for (const gate of ALL_GATES) {
+  for (const [name, gate] of ALL_GATES) {
+    if (config.disabledGates.includes(name)) continue;
+
     const result = gate(ctx);
     results.push(result);
 

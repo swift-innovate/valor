@@ -224,7 +224,7 @@ describe("Individual Gates", () => {
 });
 
 describe("Gate Runner", () => {
-  it("evaluates all 10 gates", () => {
+  it("evaluates enabled gates (default config disables 3)", () => {
     const mission = createMission({
       division_id: null, title: "Gate Test", objective: "Test", status: "queued",
       phase: null, assigned_agent_id: null, priority: "normal", constraints: [],
@@ -233,7 +233,8 @@ describe("Gate Runner", () => {
       dispatched_at: null, completed_at: null,
     });
     const result = evaluateGates(baseContext({ mission }));
-    expect(result.results).toHaveLength(10);
+    // Default config disables artifact_integrity, oath, vector_checkpoint (3 gates)
+    expect(result.results).toHaveLength(7);
     expect(result.passed).toBe(true);
   });
 
@@ -277,6 +278,7 @@ describe("Gate Runner", () => {
     evaluateGates(baseContext({ mission }));
 
     const rows = getDb().prepare("SELECT * FROM gate_results WHERE mission_id = ?").all(mission.id);
-    expect(rows).toHaveLength(10);
+    // Default config disables artifact_integrity, oath, vector_checkpoint (3 gates)
+    expect(rows).toHaveLength(7);
   });
 });
