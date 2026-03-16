@@ -8,6 +8,7 @@ import {
   getPendingApproval,
   listApprovals,
 } from "../db/index.js";
+import { getDb } from "../db/database.js";
 import {
   dispatchMission,
   processAAR,
@@ -59,6 +60,60 @@ missionRoutes.post("/", async (c) => {
   });
 
   return c.json(mission, 201);
+});
+
+// Create mission from SIGINT intercept
+missionRoutes.post("/from-sigint", async (c) => {
+  const body = await c.req.json();
+
+  // Validate required fields
+  if (!body.title || !body.objective) {
+    return c.json({ error: "Missing required fields: title, objective" }, 400);
+  }
+  if (!body.source || !body.source.intercept_id) {
+    return c.json({ error: "Missing required field: source with intercept_id" }, 400);
+  }
+
+  // Create the mission
+  const mission = createMission({
+    division_id: body.division_id ?? null,
+    title: body.title,
+    objective: body.objective,
+    status: "draft",
+    phase: null,
+    assigned_agent_id: body.assigned_agent_id ?? null,
+    priority: body.priority ?? "normal",
+    constraints: body.constraints ?? [],
+    deliverables: body.deliverables ?? [],
+    success_criteria: body.success_criteria ?? [],
+    token_usage: null,
+    cost_usd: 0,
+    revision_count: 0,
+    max_revisions: body.max_revisions ?? 3,
+    parent_mission_id: null,
+    dispatched_at: null,
+    completed_at: null,
+  });
+
+  // Store source metadata
+  getDb()
+    .prepare("UPDATE missions SET source_metadata = @metadata WHERE id = @id")
+    .run({
+      id: mission.id,
+      metadata: JSON.stringify(body.source),
+    });
+
+  // Determine which gates would be pending
+  const gatesPending = ["hil"];
+
+  return c.json(
+    {
+      mission_id: mission.id,
+      status: mission.status,
+      gates_pending: gatesPending,
+    },
+    201,
+  );
 });
 
 // Queue a draft mission for dispatch
