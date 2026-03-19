@@ -3,3 +3,5 @@ export { missionsPage } from "./missions.js";
 export { approvalsPage } from "./approvals.js";
 export { agentsPage } from "./agents.js";
 export { decisionsPage } from "./decisions.js";
+export { agentCardsPage } from "./agent-cards.js";
+export { commsPage } from "./comms.js";

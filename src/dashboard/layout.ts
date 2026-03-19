@@ -9,6 +9,8 @@ const NAV_ITEMS = [
   { href: "/dashboard/approvals", label: "Approvals", icon: "check-circle" },
   { href: "/dashboard/agents", label: "Agents", icon: "users" },
   { href: "/dashboard/decisions", label: "Decisions", icon: "zap" },
+  { href: "/dashboard/agent-cards", label: "Agent Cards", icon: "id-badge" },
+  { href: "/dashboard/comms", label: "Comms", icon: "message-square" },
 ];
 
 export function layout(title: string, activePath: string, content: HtmlContent): HtmlContent {

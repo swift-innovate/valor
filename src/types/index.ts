@@ -9,3 +9,5 @@ export * from "./gate.js";
 export * from "./sitrep.js";
 export * from "./wal.js";
 export * from "./vector.js";
+export * from "./agent-card.js";
+export * from "./comms.js";

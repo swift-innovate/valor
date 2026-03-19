@@ -10,10 +10,10 @@ import {
   healthCheckAll,
   listProviders,
   createClaudeAdapter,
-  createHerdAdapter,
+  createOllamaAdapter,
 } from "./providers/index.js";
 import { getActiveSessions, stopHealthMonitor, startHealthMonitor } from "./stream/index.js";
-import { missionRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes, sitrepRoutes } from "./api/index.js";
+import { missionRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes, sitrepRoutes, agentCardRoutes, commsRoutes } from "./api/index.js";
 import { dashboardRoutes } from "./dashboard/index.js";
 import { attachWebSocket, closeWebSocket } from "./ws/index.js";
 import { initOrchestratorListeners } from "./orchestrator/index.js";
@@ -49,6 +49,8 @@ app.route("/agents", agentRoutes);
 app.route("/personas", personaRoutes);
 app.route("/decisions", decisionRoutes);
 app.route("/sitreps", sitrepRoutes);
+app.route("/agent-cards", agentCardRoutes);
+app.route("/comms", commsRoutes);
 
 // Dashboard
 app.route("/dashboard", dashboardRoutes);
@@ -73,11 +75,11 @@ logger.info("Migrations applied");
 if (config.anthropicApiKey) {
   registerProvider(createClaudeAdapter({ apiKey: config.anthropicApiKey }));
 }
-if (config.herdBaseUrl) {
+if (config.ollamaBaseUrl) {
   registerProvider(
-    createHerdAdapter({
-      baseUrl: config.herdBaseUrl,
-      statusUrl: config.herdStatusUrl,
+    createOllamaAdapter({
+      baseUrl: config.ollamaBaseUrl,
+      statusUrl: config.ollamaStatusUrl,
     }),
   );
 }

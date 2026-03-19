@@ -62,6 +62,26 @@ export {
 } from "./sitrep-repo.js";
 
 export {
+  submitCard,
+  getCard,
+  getCardByCallsign,
+  listCards,
+  updateCard,
+  approveCard,
+  rejectCard,
+  revokeCard,
+} from "./agent-card-repo.js";
+
+export {
+  sendMessage,
+  getConversation,
+  listConversations,
+  getAgentInbox,
+  getAgentSent,
+  generateConversationId,
+} from "./comms-repo.js";
+
+export {
   createDecision,
   getDecision,
   listDecisions,

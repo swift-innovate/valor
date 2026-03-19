@@ -4,3 +4,5 @@ export { agentRoutes } from "./agents.js";
 export { personaRoutes } from "./personas.js";
 export { decisionRoutes } from "./decisions.js";
 export { sitrepRoutes } from "./sitreps.js";
+export { agentCardRoutes } from "./agent-cards.js";
+export { commsRoutes } from "./comms.js";
