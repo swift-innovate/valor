@@ -81,6 +81,9 @@ export function updateAgent(
   const now = new Date().toISOString();
   const merged = { ...existing, ...updates, updated_at: now };
 
+  // Validate before writing — prevents corrupt data from reaching SQLite
+  const parsed = AgentSchema.parse(merged);
+
   getDb()
     .prepare(
       `UPDATE agents SET callsign = @callsign, division_id = @division_id, runtime = @runtime,
@@ -90,19 +93,19 @@ export function updateAgent(
     )
     .run({
       id,
-      callsign: merged.callsign,
-      division_id: merged.division_id,
-      runtime: merged.runtime,
-      endpoint_url: merged.endpoint_url,
-      model: merged.model,
-      health_status: merged.health_status,
-      last_heartbeat: merged.last_heartbeat,
-      persona_id: merged.persona_id,
-      capabilities: JSON.stringify(merged.capabilities),
+      callsign: parsed.callsign,
+      division_id: parsed.division_id,
+      runtime: parsed.runtime,
+      endpoint_url: parsed.endpoint_url,
+      model: parsed.model,
+      health_status: parsed.health_status,
+      last_heartbeat: parsed.last_heartbeat,
+      persona_id: parsed.persona_id,
+      capabilities: JSON.stringify(parsed.capabilities),
       updated_at: now,
     });
 
-  return AgentSchema.parse(merged);
+  return parsed;
 }
 
 export function updateHeartbeat(id: string): Agent | null {

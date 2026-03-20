@@ -126,9 +126,18 @@ async function processStream(
       updateHealth(session, hbConfig);
     }
 
-    // Stream ended naturally (iterator exhausted)
+    // Stream ended naturally (iterator exhausted without a completion event).
+    // If errors were recorded and no completion event was reached, the provider
+    // failed mid-stream — treat as failure, not success.
     if (session.health !== "failed") {
-      handleStreamComplete(session);
+      if (session.total_errors > 0) {
+        handleStreamFailure(
+          session,
+          `Stream ended after ${session.total_errors} error(s) with no completion event`,
+        );
+      } else {
+        handleStreamComplete(session);
+      }
     }
   } catch (err) {
     if (!session.abort_controller.signal.aborted) {

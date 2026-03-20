@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { ZodError } from "zod";
 import {
   createAgent,
   getAgent,
@@ -8,13 +9,13 @@ import {
   deleteAgent,
   listMissions,
 } from "../db/index.js";
-import type { AgentRuntime } from "../types/index.js";
+import { AgentRuntime } from "../types/index.js";
 
 const VALID_RUNTIMES: AgentRuntime[] = [
   "openclaw",
-  "herd",
-  "claude_api",
   "ollama",
+  "claude_api",
+  "openai_api",
   "custom",
 ];
 
@@ -69,9 +70,32 @@ agentRoutes.post("/", async (c) => {
 // Update agent
 agentRoutes.put("/:id", async (c) => {
   const body = await c.req.json();
-  const agent = updateAgent(c.req.param("id"), body);
-  if (!agent) return c.json({ error: "Agent not found" }, 404);
-  return c.json(agent);
+
+  // Validate runtime if provided
+  if (body.runtime !== undefined) {
+    const result = AgentRuntime.safeParse(body.runtime);
+    if (!result.success) {
+      return c.json({ error: `Invalid runtime. Must be one of: ${AgentRuntime.options.join(", ")}` }, 400);
+    }
+  }
+
+  // Whitelist updatable fields — prevent unknown keys from reaching the repo
+  const allowed: Record<string, unknown> = {};
+  const updatable = ["callsign", "runtime", "division_id", "endpoint_url", "model", "persona_id", "capabilities", "health_status"] as const;
+  for (const key of updatable) {
+    if (key in body) allowed[key] = body[key];
+  }
+
+  try {
+    const agent = updateAgent(c.req.param("id"), allowed);
+    if (!agent) return c.json({ error: "Agent not found" }, 404);
+    return c.json(agent);
+  } catch (err) {
+    if (err instanceof ZodError) {
+      return c.json({ error: "Invalid agent data", details: err.errors }, 400);
+    }
+    throw err;
+  }
 });
 
 // Delete/deregister agent
