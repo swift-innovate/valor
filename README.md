@@ -4,21 +4,11 @@
 
 VALOR Engine is a standalone orchestration authority for AI agent fleets. It manages missions, control gates, stream supervision, divisions, and decision checkpoints — without hosting or running agents directly.
 
-## Scope Boundary
-
-VALOR Engine is **self-contained**. It has NO hard dependencies on:
-
-- **Engram** — Separate memory system. VALOR manages its own state via SQLite.
-- **Herd Pro** — Separate LLM gateway. VALOR's Provider Layer speaks standard protocols (Anthropic API, Ollama HTTP).
-- **Operative** — Separate persona/runtime framework. VALOR has its own Identity Layer.
-
-A user who points VALOR at a direct Anthropic API key gets a fully functional engine with zero additional SIT dependencies.
-
 ## Quick Start
 
 ```bash
 cp .env.example .env
-# Add your ANTHROPIC_API_KEY
+# Configure at least one provider (see .env.example)
 pnpm install
 pnpm dev
 ```
