@@ -217,46 +217,263 @@ commsPage.get("/", (c) => {
       </div>`
     : "";
 
+  // Latest subject from thread for reply pre-fill
+  const latestSubject = messages.length > 0
+    ? (messages[messages.length - 1].payload.subject as string ?? "")
+    : "";
+  // Who to reply to: last non-director sender, or first participant
+  const lastAgentSender = [...messages].reverse()
+    .find((m) => m.payload.from_agent_id !== "director")?.payload.from_agent_id as string ?? "";
+
   // Serialize callsign map for client-side JS (use raw() to prevent HTML escaping inside <script>)
   const callsignMapRaw = raw(JSON.stringify(callsignMap));
   const activeConvIdRaw = raw(JSON.stringify(activeConvId));
+  const latestSubjectRaw = raw(JSON.stringify(latestSubject));
+  const lastAgentSenderRaw = raw(JSON.stringify(lastAgentSender));
+  const agentListRaw = raw(JSON.stringify(agents.map((a) => ({ id: a.id, callsign: a.callsign }))));
+
+  // ── Reply compose box ────────────────────────────────────────────
+  const replyBox = activeConvId ? html`
+    <div class="border-t border-gray-800 bg-gray-900/80 p-3 space-y-2 flex-shrink-0">
+      <div class="flex items-center gap-2">
+        <input id="reply-subject" type="text" placeholder="Subject"
+          class="flex-1 bg-gray-800 border border-gray-700 text-gray-200 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-valor-500">
+        <select id="reply-priority"
+          class="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-valor-500">
+          <option value="routine">routine</option>
+          <option value="priority">priority</option>
+          <option value="flash">flash</option>
+        </select>
+        <select id="reply-category"
+          class="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-valor-500">
+          <option value="response">response</option>
+          <option value="advisory">advisory</option>
+          <option value="request">request</option>
+          <option value="coordination">coordination</option>
+          <option value="escalation">escalation</option>
+          <option value="status_update">status update</option>
+          <option value="task_handoff">task handoff</option>
+        </select>
+      </div>
+      <div class="flex gap-2">
+        <textarea id="reply-body" rows="3" placeholder="Write a message…"
+          class="flex-1 bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded px-3 py-2 focus:outline-none focus:border-valor-500 resize-none"></textarea>
+        <button onclick="sendReply()"
+          class="px-4 py-2 text-sm font-medium rounded bg-valor-700 hover:bg-valor-600 text-white transition-colors self-end">
+          Send
+        </button>
+      </div>
+    </div>` : html`
+    <div class="border-t border-gray-800 px-4 py-3 text-xs text-gray-600 text-center flex-shrink-0">
+      Select a conversation to reply, or start a new one.
+    </div>`;
+
+  // ── New conversation panel ───────────────────────────────────────
+  const newConvPanel = html`
+    <div id="new-conv-panel" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div class="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-lg p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-gray-200">New Conversation</h3>
+          <button onclick="closeNewConv()" class="text-gray-500 hover:text-white text-lg leading-none">✕</button>
+        </div>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">To (Agent)</label>
+            <select id="nc-to-agent"
+              class="w-full bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded px-3 py-2 focus:outline-none focus:border-valor-500">
+              <option value="">— Select agent —</option>
+              ${agents.map((a) => html`<option value="${a.id}">${a.callsign}</option>`)}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Subject</label>
+            <input id="nc-subject" type="text"
+              class="w-full bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded px-3 py-2 focus:outline-none focus:border-valor-500">
+          </div>
+          <div class="flex gap-2">
+            <div class="flex-1">
+              <label class="block text-xs text-gray-400 mb-1">Priority</label>
+              <select id="nc-priority"
+                class="w-full bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded px-3 py-2 focus:outline-none focus:border-valor-500">
+                <option value="routine">routine</option>
+                <option value="priority">priority</option>
+                <option value="flash">flash</option>
+              </select>
+            </div>
+            <div class="flex-1">
+              <label class="block text-xs text-gray-400 mb-1">Category</label>
+              <select id="nc-category"
+                class="w-full bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded px-3 py-2 focus:outline-none focus:border-valor-500">
+                <option value="advisory">advisory</option>
+                <option value="request">request</option>
+                <option value="coordination">coordination</option>
+                <option value="task_handoff">task handoff</option>
+                <option value="escalation">escalation</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Message</label>
+            <textarea id="nc-body" rows="4"
+              class="w-full bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded px-3 py-2 focus:outline-none focus:border-valor-500 resize-none"></textarea>
+          </div>
+        </div>
+        <div class="flex items-center justify-end gap-3 pt-1">
+          <button onclick="closeNewConv()" class="text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+          <button onclick="submitNewConv()"
+            class="px-4 py-2 text-sm font-medium rounded bg-valor-700 hover:bg-valor-600 text-white transition-colors">
+            Send Message
+          </button>
+        </div>
+      </div>
+    </div>`;
 
   const content = html`
     <div class="fade-in">
       <div class="flex items-center justify-between mb-4">
-        <h1 class="text-xl font-bold text-gray-100">Comms Log</h1>
-        <span class="text-sm text-gray-500">${conversations.length} conversation${conversations.length !== 1 ? "s" : ""}</span>
+        <h1 class="text-xl font-bold text-gray-100">Comms</h1>
+        <div class="flex items-center gap-3">
+          <span class="text-sm text-gray-500">${conversations.length} conversation${conversations.length !== 1 ? "s" : ""}</span>
+          <button onclick="openNewConv()"
+            class="px-3 py-1.5 text-sm font-medium rounded bg-valor-700 hover:bg-valor-600 text-white transition-colors">
+            + New
+          </button>
+        </div>
       </div>
 
       ${agentFilterBar}
 
-      <div class="flex gap-4 h-[calc(100vh-16rem)]">
+      <div class="flex gap-4 h-[calc(100vh-18rem)]">
         <!-- Left: conversation list -->
         <div class="w-80 flex-shrink-0 bg-gray-900 rounded-lg border border-gray-800 overflow-y-auto">
           ${convRows}
         </div>
 
-        <!-- Right: message thread -->
+        <!-- Right: message thread + compose -->
         <div class="flex-1 bg-gray-900 rounded-lg border border-gray-800 flex flex-col overflow-hidden">
           ${threadHeader}
           <div id="message-thread" class="flex-1 overflow-y-auto">
             ${messageRows}
           </div>
+          ${replyBox}
         </div>
       </div>
     </div>
 
+    ${newConvPanel}
+
     <script>
       const ACTIVE_CONV_ID = ${activeConvIdRaw};
       const CALLSIGN_MAP = ${callsignMapRaw};
+      const LATEST_SUBJECT = ${latestSubjectRaw};
+      const LAST_AGENT_SENDER = ${lastAgentSenderRaw};
+      const AGENT_LIST = ${agentListRaw};
+
+      // Pre-fill reply subject
+      var subjectEl = document.getElementById('reply-subject');
+      if (subjectEl && LATEST_SUBJECT) {
+        subjectEl.value = LATEST_SUBJECT.startsWith('Re: ') ? LATEST_SUBJECT : 'Re: ' + LATEST_SUBJECT;
+      }
 
       function resolveCallsign(agentId) {
         return CALLSIGN_MAP[agentId] || agentId;
       }
 
+      // ── Reply ────────────────────────────────────────────────────
+      async function sendReply() {
+        if (!ACTIVE_CONV_ID) return;
+        var body = document.getElementById('reply-body').value.trim();
+        if (!body) { showToast('Message body is required', 'error'); return; }
+        var subject = document.getElementById('reply-subject').value.trim() || LATEST_SUBJECT || 'Re: (no subject)';
+        var priority = document.getElementById('reply-priority').value;
+        var category = document.getElementById('reply-category').value;
+
+        var payload = {
+          from_agent_id: 'director',
+          to_agent_id: LAST_AGENT_SENDER || null,
+          to_division_id: null,
+          subject,
+          body,
+          priority,
+          category,
+          conversation_id: ACTIVE_CONV_ID,
+        };
+        // If no known agent sender, require a to_agent — fallback: treat as broadcast within conv
+        if (!payload.to_agent_id) {
+          showToast('No agent to reply to in this conversation', 'error');
+          return;
+        }
+
+        var res = await fetch('/comms/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          document.getElementById('reply-body').value = '';
+        } else {
+          var d = await res.json();
+          showToast(d.error || 'Failed to send', 'error');
+        }
+      }
+
+      // ── New conversation ─────────────────────────────────────────
+      function openNewConv() {
+        document.getElementById('new-conv-panel').classList.remove('hidden');
+        document.getElementById('nc-subject').focus();
+      }
+      function closeNewConv() {
+        document.getElementById('new-conv-panel').classList.add('hidden');
+      }
+
+      async function submitNewConv() {
+        var toAgent = document.getElementById('nc-to-agent').value;
+        var subject = document.getElementById('nc-subject').value.trim();
+        var body = document.getElementById('nc-body').value.trim();
+        var priority = document.getElementById('nc-priority').value;
+        var category = document.getElementById('nc-category').value;
+
+        if (!toAgent) { showToast('Select an agent to message', 'error'); return; }
+        if (!subject)  { showToast('Subject is required', 'error'); return; }
+        if (!body)     { showToast('Message body is required', 'error'); return; }
+
+        var res = await fetch('/comms/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from_agent_id: 'director',
+            to_agent_id: toAgent,
+            to_division_id: null,
+            subject,
+            body,
+            priority,
+            category,
+          }),
+        });
+        if (res.ok) {
+          var evt = await res.json();
+          closeNewConv();
+          window.location.href = '/dashboard/comms?conv=' + evt.conversation_id;
+        } else {
+          var d = await res.json();
+          showToast(d.error || 'Failed to send', 'error');
+        }
+      }
+
+      // Close modal on backdrop click
+      document.getElementById('new-conv-panel').addEventListener('click', function(e) {
+        if (e.target === this) closeNewConv();
+      });
+
+      // Ctrl+Enter to send reply
+      document.getElementById('reply-body')?.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) sendReply();
+      });
+
+      // ── WebSocket: append incoming messages ──────────────────────
       function onValorEvent(event) {
         if (event.type !== 'comms.message') return;
-        if (!ACTIVE_CONV_ID || event.conversation_id !== ACTIVE_CONV_ID) return;
+        if (!ACTIVE_CONV_ID || event.payload.conversation_id !== ACTIVE_CONV_ID) return;
 
         var thread = document.getElementById('message-thread');
         if (!thread) return;
@@ -266,7 +483,7 @@ commsPage.get("/", (c) => {
         var senderName = resolveCallsign(p.from_agent_id);
         var colorClass = isDirector ? 'text-yellow-400 font-bold' : 'text-valor-400';
         var div = document.createElement('div');
-        div.className = 'px-4 py-3 border-b border-gray-800/50 fade-in';
+        div.className = 'px-4 py-3 ' + (isDirector ? 'border-l-2 border-yellow-600 bg-yellow-950/20' : 'border-b border-gray-800/50') + ' fade-in';
 
         var h = '<div class="flex items-center gap-2 mb-1">';
         h += '<span class="text-sm font-semibold ' + colorClass + '">' + senderName + '</span>';
