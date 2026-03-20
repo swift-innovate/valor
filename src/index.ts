@@ -23,6 +23,9 @@ import { registerSigintOutcomeCallback } from "./callbacks/sigint-outcome.js";
 const app = new Hono();
 const startTime = Date.now();
 
+// Root redirect to dashboard
+app.get("/", (c) => c.redirect("/dashboard"));
+
 // Health endpoint
 app.get("/health", async (c) => {
   const providerHealth = await healthCheckAll();

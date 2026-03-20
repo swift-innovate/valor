@@ -3,6 +3,7 @@ import {
   createMission,
   getMission,
   listMissions,
+  updateMission,
   transitionMission,
   resolveApproval,
   getPendingApproval,
@@ -129,6 +130,29 @@ missionRoutes.post("/from-sigint", async (c) => {
     },
     201,
   );
+});
+
+// Update mission fields (title, objective, priority, division, assigned agent, etc.)
+missionRoutes.put("/:id", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
+  const mission = getMission(c.req.param("id"));
+  if (!mission) return c.json({ error: "Mission not found" }, 404);
+
+  const body = await c.req.json();
+  const allowed = [
+    "title", "objective", "priority", "division_id", "assigned_agent_id",
+    "constraints", "deliverables", "success_criteria", "max_revisions",
+  ] as const;
+  const updates: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (key in body) updates[key] = body[key];
+  }
+
+  const updated = updateMission(c.req.param("id"), updates);
+  if (!updated) return c.json({ error: "Mission not found" }, 404);
+  return c.json(updated);
 });
 
 // Queue a draft mission for dispatch

@@ -2,6 +2,7 @@ export { overviewPage } from "./overview.js";
 export { missionsPage } from "./missions.js";
 export { approvalsPage } from "./approvals.js";
 export { agentsPage } from "./agents.js";
+export { divisionsPage } from "./divisions.js";
 export { decisionsPage } from "./decisions.js";
 export { agentCardsPage } from "./agent-cards.js";
 export { commsPage } from "./comms.js";

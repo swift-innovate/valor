@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/missions", label: "Missions", icon: "target" },
   { href: "/dashboard/approvals", label: "Approvals", icon: "check-circle" },
   { href: "/dashboard/agents", label: "Agents", icon: "users" },
+  { href: "/dashboard/divisions", label: "Divisions", icon: "layers" },
   { href: "/dashboard/decisions", label: "Decisions", icon: "zap" },
   { href: "/dashboard/agent-cards", label: "Agent Cards", icon: "id-badge" },
   { href: "/dashboard/comms", label: "Comms", icon: "message-square" },
