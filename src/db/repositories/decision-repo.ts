@@ -53,12 +53,10 @@ export function createDecision(
   const now = new Date().toISOString();
   const id = generateDecisionId();
 
-  getDb()
-    .prepare(
-      `INSERT INTO decisions (id, mission_id, title, context, constraints, time_horizon, stakes, confidence_level, created_at, updated_at)
-       VALUES (@id, @mission_id, @title, @context, @constraints, @time_horizon, @stakes, @confidence_level, @created_at, @updated_at)`,
-    )
-    .run({
+  getDb().execute(
+    `INSERT INTO decisions (id, mission_id, title, context, constraints, time_horizon, stakes, confidence_level, created_at, updated_at)
+     VALUES (@id, @mission_id, @title, @context, @constraints, @time_horizon, @stakes, @confidence_level, @created_at, @updated_at)`,
+    {
       id,
       mission_id: input.mission_id,
       title: input.title,
@@ -69,13 +67,14 @@ export function createDecision(
       confidence_level: input.confidence_level,
       created_at: now,
       updated_at: now,
-    });
+    },
+  );
 
   return DecisionSchema.parse({ ...input, id, created_at: now, updated_at: now });
 }
 
 export function getDecision(id: string): Decision | null {
-  const row = getDb().prepare("SELECT * FROM decisions WHERE id = @id").get({ id });
+  const row = getDb().queryOne("SELECT * FROM decisions WHERE id = @id", { id });
   return row ? rowToDecision(row as Record<string, unknown>) : null;
 }
 
@@ -89,7 +88,7 @@ export function listDecisions(filters?: { mission_id?: string }): Decision[] {
   }
 
   sql += " ORDER BY created_at DESC";
-  const rows = getDb().prepare(sql).all(params);
+  const rows = getDb().queryAll(sql, params);
   return rows.map((r) => rowToDecision(r as Record<string, unknown>));
 }
 
@@ -101,12 +100,10 @@ export function createAnalysis(
   const now = new Date().toISOString();
   const id = generateAnalysisId();
 
-  getDb()
-    .prepare(
-      `INSERT INTO vector_analyses (id, decision_id, visualize, evaluate, choose, test, optimize, review, bias_risk, model_used, total_risk_score, recommendation, created_at)
-       VALUES (@id, @decision_id, @visualize, @evaluate, @choose, @test, @optimize, @review, @bias_risk, @model_used, @total_risk_score, @recommendation, @created_at)`,
-    )
-    .run({
+  getDb().execute(
+    `INSERT INTO vector_analyses (id, decision_id, visualize, evaluate, choose, test, optimize, review, bias_risk, model_used, total_risk_score, recommendation, created_at)
+     VALUES (@id, @decision_id, @visualize, @evaluate, @choose, @test, @optimize, @review, @bias_risk, @model_used, @total_risk_score, @recommendation, @created_at)`,
+    {
       id,
       decision_id: input.decision_id,
       visualize: JSON.stringify(input.visualize),
@@ -120,26 +117,28 @@ export function createAnalysis(
       total_risk_score: input.total_risk_score,
       recommendation: input.recommendation,
       created_at: now,
-    });
+    },
+  );
 
   return VectorAnalysisSchema.parse({ ...input, id, created_at: now });
 }
 
 export function getAnalysis(id: string): VectorAnalysis | null {
-  const row = getDb().prepare("SELECT * FROM vector_analyses WHERE id = @id").get({ id });
+  const row = getDb().queryOne("SELECT * FROM vector_analyses WHERE id = @id", { id });
   return row ? rowToAnalysis(row as Record<string, unknown>) : null;
 }
 
 export function getAnalysisForDecision(decisionId: string): VectorAnalysis | null {
-  const row = getDb()
-    .prepare("SELECT * FROM vector_analyses WHERE decision_id = @decision_id ORDER BY created_at DESC LIMIT 1")
-    .get({ decision_id: decisionId });
+  const row = getDb().queryOne(
+    "SELECT * FROM vector_analyses WHERE decision_id = @decision_id ORDER BY created_at DESC LIMIT 1",
+    { decision_id: decisionId },
+  );
   return row ? rowToAnalysis(row as Record<string, unknown>) : null;
 }
 
 export function listAnalyses(limit?: number): VectorAnalysis[] {
   const sql = `SELECT * FROM vector_analyses ORDER BY created_at DESC${limit ? ` LIMIT ${limit}` : ""}`;
-  const rows = getDb().prepare(sql).all();
+  const rows = getDb().queryAll(sql);
   return rows.map((r) => rowToAnalysis(r as Record<string, unknown>));
 }
 
@@ -150,19 +149,18 @@ export function createOathRule(
 ): OathRule {
   const id = generateOathId();
 
-  getDb()
-    .prepare(
-      `INSERT INTO oath_rules (id, name, layer, description, check_fn, active)
-       VALUES (@id, @name, @layer, @description, @check_fn, @active)`,
-    )
-    .run({
+  getDb().execute(
+    `INSERT INTO oath_rules (id, name, layer, description, check_fn, active)
+     VALUES (@id, @name, @layer, @description, @check_fn, @active)`,
+    {
       id,
       name: input.name,
       layer: input.layer,
       description: input.description,
       check_fn: input.check_fn,
       active: input.active ? 1 : 0,
-    });
+    },
+  );
 
   return OathRuleSchema.parse({ ...input, id });
 }
@@ -171,6 +169,6 @@ export function listOathRules(activeOnly = true): OathRule[] {
   const sql = activeOnly
     ? "SELECT * FROM oath_rules WHERE active = 1 ORDER BY layer, name"
     : "SELECT * FROM oath_rules ORDER BY layer, name";
-  const rows = getDb().prepare(sql).all();
+  const rows = getDb().queryAll(sql);
   return rows.map((r) => rowToOathRule(r as Record<string, unknown>));
 }

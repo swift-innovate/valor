@@ -16,9 +16,10 @@ export function registerSigintOutcomeCallback(): void {
     const missionId = (event.payload as { mission_id: string }).mission_id;
     if (!missionId) return;
 
-    const mission = getDb()
-      .prepare("SELECT id, source_metadata, status, created_at, completed_at FROM missions WHERE id = ?")
-      .get(missionId) as MissionRow | undefined;
+    const mission = getDb().queryOne<MissionRow>(
+      "SELECT id, source_metadata, status, created_at, completed_at FROM missions WHERE id = @id",
+      { id: missionId },
+    );
 
     if (!mission?.source_metadata) return;
 

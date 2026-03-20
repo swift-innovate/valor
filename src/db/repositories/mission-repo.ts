@@ -37,18 +37,16 @@ export function createMission(
   const now = new Date().toISOString();
   const id = generateId();
 
-  getDb()
-    .prepare(
-      `INSERT INTO missions (id, division_id, title, objective, status, phase, assigned_agent_id,
-       priority, constraints, deliverables, success_criteria, token_usage, cost_usd,
-       revision_count, max_revisions, parent_mission_id, created_at, updated_at,
-       dispatched_at, completed_at)
-       VALUES (@id, @division_id, @title, @objective, @status, @phase, @assigned_agent_id,
-       @priority, @constraints, @deliverables, @success_criteria, @token_usage, @cost_usd,
-       @revision_count, @max_revisions, @parent_mission_id, @created_at, @updated_at,
-       @dispatched_at, @completed_at)`,
-    )
-    .run({
+  getDb().execute(
+    `INSERT INTO missions (id, division_id, title, objective, status, phase, assigned_agent_id,
+     priority, constraints, deliverables, success_criteria, token_usage, cost_usd,
+     revision_count, max_revisions, parent_mission_id, created_at, updated_at,
+     dispatched_at, completed_at)
+     VALUES (@id, @division_id, @title, @objective, @status, @phase, @assigned_agent_id,
+     @priority, @constraints, @deliverables, @success_criteria, @token_usage, @cost_usd,
+     @revision_count, @max_revisions, @parent_mission_id, @created_at, @updated_at,
+     @dispatched_at, @completed_at)`,
+    {
       id,
       division_id: input.division_id,
       title: input.title,
@@ -69,13 +67,14 @@ export function createMission(
       updated_at: now,
       dispatched_at: input.dispatched_at,
       completed_at: input.completed_at,
-    });
+    },
+  );
 
   return MissionSchema.parse({ ...input, id, created_at: now, updated_at: now });
 }
 
 export function getMission(id: string): Mission | null {
-  const row = getDb().prepare("SELECT * FROM missions WHERE id = @id").get({ id });
+  const row = getDb().queryOne("SELECT * FROM missions WHERE id = @id", { id });
   return row ? rowToMission(row as Record<string, unknown>) : null;
 }
 
@@ -104,7 +103,7 @@ export function listMissions(filters?: {
   if (conditions.length) sql += " WHERE " + conditions.join(" AND ");
   sql += " ORDER BY created_at DESC";
 
-  const rows = getDb().prepare(sql).all(params);
+  const rows = getDb().queryAll(sql, params);
   return rows.map((r) => rowToMission(r as Record<string, unknown>));
 }
 
@@ -131,7 +130,7 @@ export function transitionMission(id: string, newStatus: MissionStatus): Mission
   if (updates.dispatched_at) setClauses += ", dispatched_at = @dispatched_at";
   if (updates.completed_at) setClauses += ", completed_at = @completed_at";
 
-  getDb().prepare(`UPDATE missions SET ${setClauses} WHERE id = @id`).run(updates);
+  getDb().execute(`UPDATE missions SET ${setClauses} WHERE id = @id`, updates);
 
   return getMission(id)!;
 }
@@ -146,17 +145,15 @@ export function updateMission(
   const now = new Date().toISOString();
   const merged = { ...existing, ...updates, updated_at: now };
 
-  getDb()
-    .prepare(
-      `UPDATE missions SET division_id = @division_id, title = @title, objective = @objective,
-       phase = @phase, assigned_agent_id = @assigned_agent_id, priority = @priority,
-       constraints = @constraints, deliverables = @deliverables, success_criteria = @success_criteria,
-       token_usage = @token_usage, cost_usd = @cost_usd, revision_count = @revision_count,
-       max_revisions = @max_revisions, parent_mission_id = @parent_mission_id,
-       dispatched_at = @dispatched_at, completed_at = @completed_at,
-       updated_at = @updated_at WHERE id = @id`,
-    )
-    .run({
+  getDb().execute(
+    `UPDATE missions SET division_id = @division_id, title = @title, objective = @objective,
+     phase = @phase, assigned_agent_id = @assigned_agent_id, priority = @priority,
+     constraints = @constraints, deliverables = @deliverables, success_criteria = @success_criteria,
+     token_usage = @token_usage, cost_usd = @cost_usd, revision_count = @revision_count,
+     max_revisions = @max_revisions, parent_mission_id = @parent_mission_id,
+     dispatched_at = @dispatched_at, completed_at = @completed_at,
+     updated_at = @updated_at WHERE id = @id`,
+    {
       id,
       division_id: merged.division_id,
       title: merged.title,
@@ -175,12 +172,13 @@ export function updateMission(
       dispatched_at: merged.dispatched_at,
       completed_at: merged.completed_at,
       updated_at: now,
-    });
+    },
+  );
 
   return MissionSchema.parse(merged);
 }
 
 export function deleteMission(id: string): boolean {
-  const result = getDb().prepare("DELETE FROM missions WHERE id = @id").run({ id });
+  const result = getDb().execute("DELETE FROM missions WHERE id = @id", { id });
   return result.changes > 0;
 }

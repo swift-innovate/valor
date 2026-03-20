@@ -50,19 +50,18 @@ export function evaluateGates(ctx: GateContext): GateRunResult {
     results.push(result);
 
     // Record to DB
-    getDb()
-      .prepare(
-        `INSERT INTO gate_results (mission_id, gate, verdict, reason, details, timestamp)
-         VALUES (@mission_id, @gate, @verdict, @reason, @details, @timestamp)`,
-      )
-      .run({
+    getDb().execute(
+      `INSERT INTO gate_results (mission_id, gate, verdict, reason, details, timestamp)
+       VALUES (@mission_id, @gate, @verdict, @reason, @details, @timestamp)`,
+      {
         mission_id: ctx.mission.id,
         gate: result.gate,
         verdict: result.verdict,
         reason: result.reason,
         details: result.details ? JSON.stringify(result.details) : null,
         timestamp: new Date().toISOString(),
-      });
+      },
+    );
 
     if (result.verdict === "block") blockers.push(result);
     if (result.verdict === "escalate") escalations.push(result);

@@ -23,16 +23,14 @@ export function createSitrep(
   const id = generateId();
   const now = new Date().toISOString();
 
-  getDb()
-    .prepare(
-      `INSERT INTO sitreps (id, mission_id, agent_id, phase, status, summary,
-       objectives_complete, objectives_pending, blockers, learnings,
-       confidence, tokens_used, delivered_to, created_at)
-       VALUES (@id, @mission_id, @agent_id, @phase, @status, @summary,
-       @objectives_complete, @objectives_pending, @blockers, @learnings,
-       @confidence, @tokens_used, @delivered_to, @created_at)`,
-    )
-    .run({
+  getDb().execute(
+    `INSERT INTO sitreps (id, mission_id, agent_id, phase, status, summary,
+     objectives_complete, objectives_pending, blockers, learnings,
+     confidence, tokens_used, delivered_to, created_at)
+     VALUES (@id, @mission_id, @agent_id, @phase, @status, @summary,
+     @objectives_complete, @objectives_pending, @blockers, @learnings,
+     @confidence, @tokens_used, @delivered_to, @created_at)`,
+    {
       id,
       mission_id: input.mission_id,
       agent_id: input.agent_id,
@@ -47,13 +45,14 @@ export function createSitrep(
       tokens_used: input.tokens_used,
       delivered_to: JSON.stringify(input.delivered_to),
       created_at: now,
-    });
+    },
+  );
 
   return SitrepSchema.parse({ ...input, id, created_at: now });
 }
 
 export function getSitrep(id: string): Sitrep | null {
-  const row = getDb().prepare("SELECT * FROM sitreps WHERE id = @id").get({ id });
+  const row = getDb().queryOne("SELECT * FROM sitreps WHERE id = @id", { id });
   return row ? rowToSitrep(row as Record<string, unknown>) : null;
 }
 
@@ -77,13 +76,14 @@ export function listSitreps(filters?: {
   if (conditions.length) sql += " WHERE " + conditions.join(" AND ");
   sql += " ORDER BY created_at DESC";
 
-  const rows = getDb().prepare(sql).all(params);
+  const rows = getDb().queryAll(sql, params);
   return rows.map((r) => rowToSitrep(r as Record<string, unknown>));
 }
 
 export function getLatestSitrep(missionId: string): Sitrep | null {
-  const row = getDb()
-    .prepare("SELECT * FROM sitreps WHERE mission_id = @mission_id ORDER BY created_at DESC LIMIT 1")
-    .get({ mission_id: missionId });
+  const row = getDb().queryOne(
+    "SELECT * FROM sitreps WHERE mission_id = @mission_id ORDER BY created_at DESC LIMIT 1",
+    { mission_id: missionId },
+  );
   return row ? rowToSitrep(row as Record<string, unknown>) : null;
 }

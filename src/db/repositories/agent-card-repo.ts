@@ -27,11 +27,10 @@ export function submitCard(input: {
   description: string;
 }): AgentCard {
   // Check for existing active card with this callsign
-  const existing = getDb()
-    .prepare(
-      "SELECT id, approval_status FROM agent_cards WHERE callsign = @callsign AND approval_status IN ('pending', 'approved') LIMIT 1",
-    )
-    .get({ callsign: input.callsign }) as { id: string; approval_status: string } | undefined;
+  const existing = getDb().queryOne<{ id: string; approval_status: string }>(
+    "SELECT id, approval_status FROM agent_cards WHERE callsign = @callsign AND approval_status IN ('pending', 'approved') LIMIT 1",
+    { callsign: input.callsign },
+  );
 
   if (existing) {
     if (existing.approval_status === "approved") {
@@ -44,12 +43,10 @@ export function submitCard(input: {
   const now = new Date().toISOString();
   const id = generateId();
 
-  getDb()
-    .prepare(
-      `INSERT INTO agent_cards (id, callsign, name, operator, version, primary_skills, runtime, model, endpoint_url, description, approval_status, submitted_at, updated_at)
-       VALUES (@id, @callsign, @name, @operator, @version, @primary_skills, @runtime, @model, @endpoint_url, @description, 'pending', @submitted_at, @updated_at)`,
-    )
-    .run({
+  getDb().execute(
+    `INSERT INTO agent_cards (id, callsign, name, operator, version, primary_skills, runtime, model, endpoint_url, description, approval_status, submitted_at, updated_at)
+     VALUES (@id, @callsign, @name, @operator, @version, @primary_skills, @runtime, @model, @endpoint_url, @description, 'pending', @submitted_at, @updated_at)`,
+    {
       id,
       callsign: input.callsign,
       name: input.name,
@@ -62,10 +59,11 @@ export function submitCard(input: {
       description: input.description,
       submitted_at: now,
       updated_at: now,
-    });
+    },
+  );
 
   const card = rowToCard(
-    getDb().prepare("SELECT * FROM agent_cards WHERE id = @id").get({ id }) as Record<string, unknown>,
+    getDb().queryOne("SELECT * FROM agent_cards WHERE id = @id", { id }) as Record<string, unknown>,
   );
 
   publish({
@@ -82,14 +80,15 @@ export function submitCard(input: {
 }
 
 export function getCard(id: string): AgentCard | null {
-  const row = getDb().prepare("SELECT * FROM agent_cards WHERE id = @id").get({ id });
+  const row = getDb().queryOne("SELECT * FROM agent_cards WHERE id = @id", { id });
   return row ? rowToCard(row as Record<string, unknown>) : null;
 }
 
 export function getCardByCallsign(callsign: string): AgentCard | null {
-  const row = getDb()
-    .prepare("SELECT * FROM agent_cards WHERE callsign = @callsign ORDER BY submitted_at DESC LIMIT 1")
-    .get({ callsign });
+  const row = getDb().queryOne(
+    "SELECT * FROM agent_cards WHERE callsign = @callsign ORDER BY submitted_at DESC LIMIT 1",
+    { callsign },
+  );
   return row ? rowToCard(row as Record<string, unknown>) : null;
 }
 
@@ -118,7 +117,7 @@ export function listCards(filters?: {
   if (conditions.length) sql += " WHERE " + conditions.join(" AND ");
   sql += " ORDER BY submitted_at DESC";
 
-  const rows = getDb().prepare(sql).all(params);
+  const rows = getDb().queryAll(sql, params);
   return rows.map((r) => rowToCard(r as Record<string, unknown>));
 }
 
@@ -132,11 +131,10 @@ export function updateCard(
 
   // If callsign is changing, ensure the new callsign isn't already taken
   if (updates.callsign && updates.callsign !== existing.callsign) {
-    const conflict = getDb()
-      .prepare(
-        "SELECT id, approval_status FROM agent_cards WHERE callsign = @callsign AND approval_status IN ('pending', 'approved') AND id != @id LIMIT 1",
-      )
-      .get({ callsign: updates.callsign, id }) as { id: string; approval_status: string } | undefined;
+    const conflict = getDb().queryOne<{ id: string; approval_status: string }>(
+      "SELECT id, approval_status FROM agent_cards WHERE callsign = @callsign AND approval_status IN ('pending', 'approved') AND id != @id LIMIT 1",
+      { callsign: updates.callsign, id },
+    );
 
     if (conflict) {
       if (conflict.approval_status === "approved") {
@@ -151,13 +149,11 @@ export function updateCard(
 
   const merged = { ...existing, ...updates, updated_at: now };
 
-  getDb()
-    .prepare(
-      `UPDATE agent_cards SET callsign = @callsign, name = @name, operator = @operator, version = @version,
-       primary_skills = @primary_skills, runtime = @runtime, model = @model, endpoint_url = @endpoint_url,
-       description = @description, updated_at = @updated_at WHERE id = @id`,
-    )
-    .run({
+  getDb().execute(
+    `UPDATE agent_cards SET callsign = @callsign, name = @name, operator = @operator, version = @version,
+     primary_skills = @primary_skills, runtime = @runtime, model = @model, endpoint_url = @endpoint_url,
+     description = @description, updated_at = @updated_at WHERE id = @id`,
+    {
       id,
       callsign: merged.callsign,
       name: merged.name,
@@ -169,7 +165,8 @@ export function updateCard(
       endpoint_url: merged.endpoint_url,
       description: merged.description,
       updated_at: now,
-    });
+    },
+  );
 
   return getCard(id);
 }
@@ -194,18 +191,17 @@ export function approveCard(id: string, approvedBy: string): AgentCard | null {
     last_heartbeat: null,
   });
 
-  getDb()
-    .prepare(
-      `UPDATE agent_cards SET approval_status = 'approved', approved_by = @approved_by,
-       approved_at = @approved_at, agent_id = @agent_id, updated_at = @updated_at WHERE id = @id`,
-    )
-    .run({
+  getDb().execute(
+    `UPDATE agent_cards SET approval_status = 'approved', approved_by = @approved_by,
+     approved_at = @approved_at, agent_id = @agent_id, updated_at = @updated_at WHERE id = @id`,
+    {
       id,
       approved_by: approvedBy,
       approved_at: now,
       agent_id: agent.id,
       updated_at: now,
-    });
+    },
+  );
 
   const card = getCard(id)!;
 
@@ -248,12 +244,11 @@ export function rejectCard(id: string, reason: string): AgentCard | null {
 
   const now = new Date().toISOString();
 
-  getDb()
-    .prepare(
-      `UPDATE agent_cards SET approval_status = 'rejected', rejection_reason = @reason,
-       updated_at = @updated_at WHERE id = @id`,
-    )
-    .run({ id, reason, updated_at: now });
+  getDb().execute(
+    `UPDATE agent_cards SET approval_status = 'rejected', rejection_reason = @reason,
+     updated_at = @updated_at WHERE id = @id`,
+    { id, reason, updated_at: now },
+  );
 
   const card = getCard(id)!;
 
@@ -304,11 +299,10 @@ export function revokeCard(id: string): AgentCard | null {
     updateAgent(existing.agent_id, { health_status: "deregistered" });
   }
 
-  getDb()
-    .prepare(
-      `UPDATE agent_cards SET approval_status = 'revoked', updated_at = @updated_at WHERE id = @id`,
-    )
-    .run({ id, updated_at: now });
+  getDb().execute(
+    `UPDATE agent_cards SET approval_status = 'revoked', updated_at = @updated_at WHERE id = @id`,
+    { id, updated_at: now },
+  );
 
   const card = getCard(id)!;
 

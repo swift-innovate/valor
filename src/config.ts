@@ -3,6 +3,8 @@ import { z } from "zod";
 const ConfigSchema = z.object({
   port: z.coerce.number().int().positive().default(3200),
   dbPath: z.string().min(1).default("./data/valor.db"),
+  dbBackend: z.enum(["sqlite", "postgres"]).default("sqlite"),
+  dbPostgresUrl: z.string().optional(),
   logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
   anthropicApiKey: z.string().optional(),
   ollamaBaseUrl: z.string().optional(),
@@ -19,6 +21,8 @@ export type Config = z.infer<typeof ConfigSchema>;
 export const config: Config = ConfigSchema.parse({
   port: process.env.VALOR_PORT,
   dbPath: process.env.VALOR_DB_PATH,
+  dbBackend: process.env.DB_BACKEND,
+  dbPostgresUrl: process.env.DB_POSTGRES_URL,
   logLevel: process.env.LOG_LEVEL,
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
   ollamaBaseUrl: process.env.OLLAMA_BASE_URL,

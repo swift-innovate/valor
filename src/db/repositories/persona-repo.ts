@@ -25,18 +25,16 @@ export function createPersona(
   const now = new Date().toISOString();
   const id = generateId();
 
-  getDb()
-    .prepare(
-      `INSERT INTO personas (id, name, callsign, role, division_id, ssop_version,
-       core_identity, communication_style, decision_framework,
-       knowledge_domains, operational_constraints, personality_traits,
-       active, created_at, updated_at)
-       VALUES (@id, @name, @callsign, @role, @division_id, @ssop_version,
-       @core_identity, @communication_style, @decision_framework,
-       @knowledge_domains, @operational_constraints, @personality_traits,
-       @active, @created_at, @updated_at)`,
-    )
-    .run({
+  getDb().execute(
+    `INSERT INTO personas (id, name, callsign, role, division_id, ssop_version,
+     core_identity, communication_style, decision_framework,
+     knowledge_domains, operational_constraints, personality_traits,
+     active, created_at, updated_at)
+     VALUES (@id, @name, @callsign, @role, @division_id, @ssop_version,
+     @core_identity, @communication_style, @decision_framework,
+     @knowledge_domains, @operational_constraints, @personality_traits,
+     @active, @created_at, @updated_at)`,
+    {
       id,
       name: input.name,
       callsign: input.callsign,
@@ -52,20 +50,22 @@ export function createPersona(
       active: input.active ? 1 : 0,
       created_at: now,
       updated_at: now,
-    });
+    },
+  );
 
   return PersonaSchema.parse({ ...input, id, created_at: now, updated_at: now });
 }
 
 export function getPersona(id: string): Persona | null {
-  const row = getDb().prepare("SELECT * FROM personas WHERE id = @id").get({ id });
+  const row = getDb().queryOne("SELECT * FROM personas WHERE id = @id", { id });
   return row ? rowToPersona(row as Record<string, unknown>) : null;
 }
 
 export function getPersonaByCallsign(callsign: string): Persona | null {
-  const row = getDb()
-    .prepare("SELECT * FROM personas WHERE callsign = @callsign AND active = 1")
-    .get({ callsign });
+  const row = getDb().queryOne(
+    "SELECT * FROM personas WHERE callsign = @callsign AND active = 1",
+    { callsign },
+  );
   return row ? rowToPersona(row as Record<string, unknown>) : null;
 }
 
@@ -94,7 +94,7 @@ export function listPersonas(filters?: {
   if (conditions.length) sql += " WHERE " + conditions.join(" AND ");
   sql += " ORDER BY name";
 
-  const rows = getDb().prepare(sql).all(params);
+  const rows = getDb().queryAll(sql, params);
   return rows.map((r) => rowToPersona(r as Record<string, unknown>));
 }
 
@@ -108,16 +108,14 @@ export function updatePersona(
   const now = new Date().toISOString();
   const merged = { ...existing, ...updates, updated_at: now };
 
-  getDb()
-    .prepare(
-      `UPDATE personas SET name = @name, callsign = @callsign, role = @role,
-       division_id = @division_id, ssop_version = @ssop_version,
-       core_identity = @core_identity, communication_style = @communication_style,
-       decision_framework = @decision_framework, knowledge_domains = @knowledge_domains,
-       operational_constraints = @operational_constraints, personality_traits = @personality_traits,
-       active = @active, updated_at = @updated_at WHERE id = @id`,
-    )
-    .run({
+  getDb().execute(
+    `UPDATE personas SET name = @name, callsign = @callsign, role = @role,
+     division_id = @division_id, ssop_version = @ssop_version,
+     core_identity = @core_identity, communication_style = @communication_style,
+     decision_framework = @decision_framework, knowledge_domains = @knowledge_domains,
+     operational_constraints = @operational_constraints, personality_traits = @personality_traits,
+     active = @active, updated_at = @updated_at WHERE id = @id`,
+    {
       id,
       name: merged.name,
       callsign: merged.callsign,
@@ -132,12 +130,13 @@ export function updatePersona(
       personality_traits: JSON.stringify(merged.personality_traits),
       active: merged.active ? 1 : 0,
       updated_at: now,
-    });
+    },
+  );
 
   return PersonaSchema.parse(merged);
 }
 
 export function deletePersona(id: string): boolean {
-  const result = getDb().prepare("DELETE FROM personas WHERE id = @id").run({ id });
+  const result = getDb().execute("DELETE FROM personas WHERE id = @id", { id });
   return result.changes > 0;
 }

@@ -22,12 +22,10 @@ export function appendEvent(
   const id = generateId();
   const timestamp = new Date().toISOString();
 
-  getDb()
-    .prepare(
-      `INSERT INTO events (id, type, timestamp, source, target, conversation_id, in_reply_to, payload, metadata)
-       VALUES (@id, @type, @timestamp, @source, @target, @conversation_id, @in_reply_to, @payload, @metadata)`,
-    )
-    .run({
+  getDb().execute(
+    `INSERT INTO events (id, type, timestamp, source, target, conversation_id, in_reply_to, payload, metadata)
+     VALUES (@id, @type, @timestamp, @source, @target, @conversation_id, @in_reply_to, @payload, @metadata)`,
+    {
       id,
       type: input.type,
       timestamp,
@@ -37,7 +35,8 @@ export function appendEvent(
       in_reply_to: input.in_reply_to,
       payload: JSON.stringify(input.payload),
       metadata: input.metadata ? JSON.stringify(input.metadata) : null,
-    });
+    },
+  );
 
   return EventEnvelopeSchema.parse({ ...input, id, timestamp });
 }
@@ -79,11 +78,11 @@ export function queryEvents(filters?: {
     params.limit = filters.limit;
   }
 
-  const rows = getDb().prepare(sql).all(params);
+  const rows = getDb().queryAll(sql, params);
   return rows.map((r) => rowToEvent(r as Record<string, unknown>));
 }
 
 export function getEvent(id: string): EventEnvelope | null {
-  const row = getDb().prepare("SELECT * FROM events WHERE id = @id").get({ id });
+  const row = getDb().queryOne("SELECT * FROM events WHERE id = @id", { id });
   return row ? rowToEvent(row as Record<string, unknown>) : null;
 }

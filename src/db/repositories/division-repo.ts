@@ -20,12 +20,10 @@ export function createDivision(
   const now = new Date().toISOString();
   const id = generateId();
 
-  getDb()
-    .prepare(
-      `INSERT INTO divisions (id, name, lead_agent_id, autonomy_policy, escalation_policy, namespace, created_at, updated_at)
-       VALUES (@id, @name, @lead_agent_id, @autonomy_policy, @escalation_policy, @namespace, @created_at, @updated_at)`,
-    )
-    .run({
+  getDb().execute(
+    `INSERT INTO divisions (id, name, lead_agent_id, autonomy_policy, escalation_policy, namespace, created_at, updated_at)
+     VALUES (@id, @name, @lead_agent_id, @autonomy_policy, @escalation_policy, @namespace, @created_at, @updated_at)`,
+    {
       id,
       name: input.name,
       lead_agent_id: input.lead_agent_id,
@@ -34,18 +32,19 @@ export function createDivision(
       namespace: input.namespace,
       created_at: now,
       updated_at: now,
-    });
+    },
+  );
 
   return DivisionSchema.parse({ ...input, id, created_at: now, updated_at: now });
 }
 
 export function getDivision(id: string): Division | null {
-  const row = getDb().prepare("SELECT * FROM divisions WHERE id = @id").get({ id });
+  const row = getDb().queryOne("SELECT * FROM divisions WHERE id = @id", { id });
   return row ? rowToDivision(row as Record<string, unknown>) : null;
 }
 
 export function listDivisions(): Division[] {
-  const rows = getDb().prepare("SELECT * FROM divisions ORDER BY name").all();
+  const rows = getDb().queryAll("SELECT * FROM divisions ORDER BY name");
   return rows.map((r) => rowToDivision(r as Record<string, unknown>));
 }
 
@@ -59,13 +58,11 @@ export function updateDivision(
   const now = new Date().toISOString();
   const merged = { ...existing, ...updates, updated_at: now };
 
-  getDb()
-    .prepare(
-      `UPDATE divisions SET name = @name, lead_agent_id = @lead_agent_id,
-       autonomy_policy = @autonomy_policy, escalation_policy = @escalation_policy,
-       namespace = @namespace, updated_at = @updated_at WHERE id = @id`,
-    )
-    .run({
+  getDb().execute(
+    `UPDATE divisions SET name = @name, lead_agent_id = @lead_agent_id,
+     autonomy_policy = @autonomy_policy, escalation_policy = @escalation_policy,
+     namespace = @namespace, updated_at = @updated_at WHERE id = @id`,
+    {
       id,
       name: merged.name,
       lead_agent_id: merged.lead_agent_id,
@@ -73,12 +70,13 @@ export function updateDivision(
       escalation_policy: JSON.stringify(merged.escalation_policy),
       namespace: merged.namespace,
       updated_at: now,
-    });
+    },
+  );
 
   return DivisionSchema.parse(merged);
 }
 
 export function deleteDivision(id: string): boolean {
-  const result = getDb().prepare("DELETE FROM divisions WHERE id = @id").run({ id });
+  const result = getDb().execute("DELETE FROM divisions WHERE id = @id", { id });
   return result.changes > 0;
 }

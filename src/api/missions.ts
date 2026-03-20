@@ -113,12 +113,10 @@ missionRoutes.post("/from-sigint", async (c) => {
   });
 
   // Store source metadata
-  getDb()
-    .prepare("UPDATE missions SET source_metadata = @metadata WHERE id = @id")
-    .run({
-      id: mission.id,
-      metadata: JSON.stringify(body.source),
-    });
+  getDb().execute("UPDATE missions SET source_metadata = @metadata WHERE id = @id", {
+    id: mission.id,
+    metadata: JSON.stringify(body.source),
+  });
 
   // Determine which gates would be pending
   const gatesPending = ["hil"];

@@ -12,12 +12,10 @@ export function appendAuditEntry(
   const id = generateId();
   const timestamp = new Date().toISOString();
 
-  getDb()
-    .prepare(
-      `INSERT INTO audit_log (id, entity_type, entity_id, operation, before_state, after_state, actor_id, timestamp)
-       VALUES (@id, @entity_type, @entity_id, @operation, @before_state, @after_state, @actor_id, @timestamp)`,
-    )
-    .run({
+  getDb().execute(
+    `INSERT INTO audit_log (id, entity_type, entity_id, operation, before_state, after_state, actor_id, timestamp)
+     VALUES (@id, @entity_type, @entity_id, @operation, @before_state, @after_state, @actor_id, @timestamp)`,
+    {
       id,
       entity_type: input.entity_type,
       entity_id: input.entity_id,
@@ -26,7 +24,8 @@ export function appendAuditEntry(
       after_state: input.after_state,
       actor_id: input.actor_id,
       timestamp,
-    });
+    },
+  );
 
   return WALEntrySchema.parse({ ...input, id, timestamp });
 }
@@ -72,6 +71,6 @@ export function queryAuditLog(filters?: {
     params.limit = filters.limit;
   }
 
-  const rows = getDb().prepare(sql).all(params);
+  const rows = getDb().queryAll(sql, params);
   return rows.map((r) => WALEntrySchema.parse(r));
 }

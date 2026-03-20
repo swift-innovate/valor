@@ -23,19 +23,18 @@ export function createApproval(input: {
   const id = `apr_${nanoid(21)}`;
   const now = new Date().toISOString();
 
-  getDb()
-    .prepare(
-      `INSERT INTO approvals (id, mission_id, gate, requested_by, status, created_at, expires_at)
-       VALUES (@id, @mission_id, @gate, @requested_by, 'pending', @created_at, @expires_at)`,
-    )
-    .run({
+  getDb().execute(
+    `INSERT INTO approvals (id, mission_id, gate, requested_by, status, created_at, expires_at)
+     VALUES (@id, @mission_id, @gate, @requested_by, 'pending', @created_at, @expires_at)`,
+    {
       id,
       mission_id: input.mission_id,
       gate: input.gate,
       requested_by: input.requested_by,
       created_at: now,
       expires_at: input.expires_at ?? null,
-    });
+    },
+  );
 
   return {
     id,
@@ -59,31 +58,31 @@ export function resolveApproval(
   if (!existing || existing.status !== "pending") return null;
 
   const now = new Date().toISOString();
-  getDb()
-    .prepare(
-      `UPDATE approvals SET status = @status, resolved_by = @resolved_by,
-       reason = @reason, resolved_at = @resolved_at WHERE id = @id`,
-    )
-    .run({
+  getDb().execute(
+    `UPDATE approvals SET status = @status, resolved_by = @resolved_by,
+     reason = @reason, resolved_at = @resolved_at WHERE id = @id`,
+    {
       id,
       status: resolution.status,
       resolved_by: resolution.resolved_by,
       reason: resolution.reason ?? null,
       resolved_at: now,
-    });
+    },
+  );
 
   return { ...existing, ...resolution, reason: resolution.reason ?? null, resolved_at: now };
 }
 
 export function getApproval(id: string): Approval | null {
-  const row = getDb().prepare("SELECT * FROM approvals WHERE id = @id").get({ id });
+  const row = getDb().queryOne("SELECT * FROM approvals WHERE id = @id", { id });
   return (row as Approval) ?? null;
 }
 
 export function getPendingApproval(missionId: string): Approval | null {
-  const row = getDb()
-    .prepare("SELECT * FROM approvals WHERE mission_id = @mission_id AND status = 'pending' ORDER BY created_at DESC LIMIT 1")
-    .get({ mission_id: missionId });
+  const row = getDb().queryOne(
+    "SELECT * FROM approvals WHERE mission_id = @mission_id AND status = 'pending' ORDER BY created_at DESC LIMIT 1",
+    { mission_id: missionId },
+  );
   return (row as Approval) ?? null;
 }
 
@@ -107,5 +106,5 @@ export function listApprovals(filters?: {
   if (conditions.length) sql += " WHERE " + conditions.join(" AND ");
   sql += " ORDER BY created_at DESC";
 
-  return getDb().prepare(sql).all(params) as Approval[];
+  return getDb().queryAll(sql, params) as Approval[];
 }

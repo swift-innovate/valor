@@ -105,13 +105,11 @@ export function sendMessage(input: CommsMessage): EventEnvelope {
   };
 
   // Check if this is the first message in this conversation (before publishing)
-  const existingCount = (
-    getDb()
-      .prepare(
-        "SELECT COUNT(*) as cnt FROM events WHERE type = 'comms.message' AND conversation_id = @conv_id",
-      )
-      .get({ conv_id: input.conversation_id }) as { cnt: number }
-  ).cnt;
+  const countRow = getDb().queryOne<{ cnt: number }>(
+    "SELECT COUNT(*) as cnt FROM events WHERE type = 'comms.message' AND conversation_id = @conv_id",
+    { conv_id: input.conversation_id },
+  );
+  const existingCount = countRow?.cnt ?? 0;
 
   const isNewConversation = existingCount === 0;
 
@@ -171,16 +169,16 @@ export function getConversation(
     params.limit = filters.limit;
   }
 
-  const rows = getDb().prepare(sql).all(params);
+  const rows = getDb().queryAll(sql, params);
   return rows.map((r) => rowToEvent(r as Record<string, unknown>));
 }
 
 export function listConversations(
   agentIdFilter?: string,
 ): CommsConversation[] {
-  const rows = getDb()
-    .prepare("SELECT * FROM events WHERE type = 'comms.message' ORDER BY timestamp ASC")
-    .all() as Record<string, unknown>[];
+  const rows = getDb().queryAll(
+    "SELECT * FROM events WHERE type = 'comms.message' ORDER BY timestamp ASC",
+  ) as Record<string, unknown>[];
 
   if (rows.length === 0) return [];
 
@@ -259,7 +257,7 @@ export function getAgentInbox(agentId: string, filters?: CommsFilters): EventEnv
     params.limit = filters.limit;
   }
 
-  const rows = getDb().prepare(sql).all(params);
+  const rows = getDb().queryAll(sql, params);
   return rows.map((r) => rowToEvent(r as Record<string, unknown>));
 }
 
@@ -279,7 +277,7 @@ export function getAgentSent(agentId: string, filters?: CommsFilters): EventEnve
     params.limit = filters.limit;
   }
 
-  const rows = getDb().prepare(sql).all(params);
+  const rows = getDb().queryAll(sql, params);
   return rows.map((r) => rowToEvent(r as Record<string, unknown>));
 }
 

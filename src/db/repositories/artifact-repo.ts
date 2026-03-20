@@ -30,12 +30,10 @@ export function createArtifact(input: {
   const now = new Date().toISOString();
   const id = generateId();
 
-  getDb()
-    .prepare(
-      `INSERT INTO artifacts (id, title, content_type, language, content, summary, created_by, conversation_id, version, created_at, updated_at)
-       VALUES (@id, @title, @content_type, @language, @content, @summary, @created_by, @conversation_id, 1, @created_at, @updated_at)`,
-    )
-    .run({
+  getDb().execute(
+    `INSERT INTO artifacts (id, title, content_type, language, content, summary, created_by, conversation_id, version, created_at, updated_at)
+     VALUES (@id, @title, @content_type, @language, @content, @summary, @created_by, @conversation_id, 1, @created_at, @updated_at)`,
+    {
       id,
       title: input.title,
       content_type: input.content_type,
@@ -46,10 +44,11 @@ export function createArtifact(input: {
       conversation_id: input.conversation_id ?? null,
       created_at: now,
       updated_at: now,
-    });
+    },
+  );
 
   const artifact = rowToArtifact(
-    getDb().prepare("SELECT * FROM artifacts WHERE id = @id").get({ id }) as Record<string, unknown>,
+    getDb().queryOne("SELECT * FROM artifacts WHERE id = @id", { id }) as Record<string, unknown>,
   );
 
   publish({
@@ -71,7 +70,7 @@ export function createArtifact(input: {
 }
 
 export function getArtifact(id: string): Artifact | null {
-  const row = getDb().prepare("SELECT * FROM artifacts WHERE id = @id").get({ id });
+  const row = getDb().queryOne("SELECT * FROM artifacts WHERE id = @id", { id });
   return row ? rowToArtifact(row as Record<string, unknown>) : null;
 }
 
@@ -85,12 +84,10 @@ export function updateArtifact(
   const now = new Date().toISOString();
   const newVersion = existing.version + 1;
 
-  getDb()
-    .prepare(
-      `UPDATE artifacts SET title = @title, content = @content, summary = @summary,
-       language = @language, version = @version, updated_at = @updated_at WHERE id = @id`,
-    )
-    .run({
+  getDb().execute(
+    `UPDATE artifacts SET title = @title, content = @content, summary = @summary,
+     language = @language, version = @version, updated_at = @updated_at WHERE id = @id`,
+    {
       id,
       title: updates.title ?? existing.title,
       content: updates.content ?? existing.content,
@@ -98,7 +95,8 @@ export function updateArtifact(
       language: updates.language !== undefined ? updates.language : existing.language,
       version: newVersion,
       updated_at: now,
-    });
+    },
+  );
 
   const artifact = getArtifact(id)!;
 
@@ -140,14 +138,15 @@ export function listArtifacts(filters?: {
   if (conditions.length) sql += " WHERE " + conditions.join(" AND ");
   sql += " ORDER BY created_at DESC";
 
-  const rows = getDb().prepare(sql).all(params);
+  const rows = getDb().queryAll(sql, params);
   return rows.map((r) => rowToArtifact(r as Record<string, unknown>));
 }
 
 export function listArtifactsByConversation(conversationId: string): Artifact[] {
-  const rows = getDb()
-    .prepare("SELECT * FROM artifacts WHERE conversation_id = @conversation_id ORDER BY created_at ASC")
-    .all({ conversation_id: conversationId });
+  const rows = getDb().queryAll(
+    "SELECT * FROM artifacts WHERE conversation_id = @conversation_id ORDER BY created_at ASC",
+    { conversation_id: conversationId },
+  );
   return rows.map((r) => rowToArtifact(r as Record<string, unknown>));
 }
 
@@ -155,7 +154,7 @@ export function deleteArtifact(id: string): boolean {
   const existing = getArtifact(id);
   if (!existing) return false;
 
-  getDb().prepare("DELETE FROM artifacts WHERE id = @id").run({ id });
+  getDb().execute("DELETE FROM artifacts WHERE id = @id", { id });
 
   publish({
     type: "artifact.deleted",

@@ -19,12 +19,10 @@ export function createAgent(
   const now = new Date().toISOString();
   const id = generateId();
 
-  getDb()
-    .prepare(
-      `INSERT INTO agents (id, callsign, division_id, runtime, endpoint_url, model, health_status, last_heartbeat, persona_id, capabilities, created_at, updated_at)
-       VALUES (@id, @callsign, @division_id, @runtime, @endpoint_url, @model, @health_status, @last_heartbeat, @persona_id, @capabilities, @created_at, @updated_at)`,
-    )
-    .run({
+  getDb().execute(
+    `INSERT INTO agents (id, callsign, division_id, runtime, endpoint_url, model, health_status, last_heartbeat, persona_id, capabilities, created_at, updated_at)
+     VALUES (@id, @callsign, @division_id, @runtime, @endpoint_url, @model, @health_status, @last_heartbeat, @persona_id, @capabilities, @created_at, @updated_at)`,
+    {
       id,
       callsign: input.callsign,
       division_id: input.division_id,
@@ -37,13 +35,14 @@ export function createAgent(
       capabilities: JSON.stringify(input.capabilities),
       created_at: now,
       updated_at: now,
-    });
+    },
+  );
 
   return AgentSchema.parse({ ...input, id, created_at: now, updated_at: now });
 }
 
 export function getAgent(id: string): Agent | null {
-  const row = getDb().prepare("SELECT * FROM agents WHERE id = @id").get({ id });
+  const row = getDb().queryOne("SELECT * FROM agents WHERE id = @id", { id });
   return row ? rowToAgent(row as Record<string, unknown>) : null;
 }
 
@@ -67,7 +66,7 @@ export function listAgents(filters?: {
   if (conditions.length) sql += " WHERE " + conditions.join(" AND ");
   sql += " ORDER BY callsign";
 
-  const rows = getDb().prepare(sql).all(params);
+  const rows = getDb().queryAll(sql, params);
   return rows.map((r) => rowToAgent(r as Record<string, unknown>));
 }
 
@@ -81,17 +80,15 @@ export function updateAgent(
   const now = new Date().toISOString();
   const merged = { ...existing, ...updates, updated_at: now };
 
-  // Validate before writing — prevents corrupt data from reaching SQLite
+  // Validate before writing — prevents corrupt data from reaching the database
   const parsed = AgentSchema.parse(merged);
 
-  getDb()
-    .prepare(
-      `UPDATE agents SET callsign = @callsign, division_id = @division_id, runtime = @runtime,
-       endpoint_url = @endpoint_url, model = @model, health_status = @health_status,
-       last_heartbeat = @last_heartbeat, persona_id = @persona_id, capabilities = @capabilities,
-       updated_at = @updated_at WHERE id = @id`,
-    )
-    .run({
+  getDb().execute(
+    `UPDATE agents SET callsign = @callsign, division_id = @division_id, runtime = @runtime,
+     endpoint_url = @endpoint_url, model = @model, health_status = @health_status,
+     last_heartbeat = @last_heartbeat, persona_id = @persona_id, capabilities = @capabilities,
+     updated_at = @updated_at WHERE id = @id`,
+    {
       id,
       callsign: parsed.callsign,
       division_id: parsed.division_id,
@@ -103,7 +100,8 @@ export function updateAgent(
       persona_id: parsed.persona_id,
       capabilities: JSON.stringify(parsed.capabilities),
       updated_at: now,
-    });
+    },
+  );
 
   return parsed;
 }
@@ -116,6 +114,6 @@ export function updateHeartbeat(id: string): Agent | null {
 }
 
 export function deleteAgent(id: string): boolean {
-  const result = getDb().prepare("DELETE FROM agents WHERE id = @id").run({ id });
+  const result = getDb().execute("DELETE FROM agents WHERE id = @id", { id });
   return result.changes > 0;
 }

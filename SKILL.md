@@ -23,18 +23,77 @@ Your lifecycle as a VALOR agent:
 **You must actively poll for messages.** VALOR does not push messages to you over HTTP — you must check your inbox regularly and respond. This is your core duty as a VALOR agent.
 
 ```
+On startup:
+  1. Load LAST_CHECK timestamp from state file (~/.valor-agent-state or similar)
+     - If no state file exists, set LAST_CHECK to current ISO timestamp
+     - Do NOT default to empty string or epoch — you will replay entire history
+
 Every 10-15 seconds:
-  1. GET /comms/agents/:agentId/inbox?since=<timestamp_of_last_check>
-  2. For each new message:
+  1. GET /comms/agents/:agentId/inbox?since=<LAST_CHECK>
+  2. Filter out messages where payload.from_agent_id === YOUR_AGENT_ID
+     - The inbox returns messages targeted at you, but in group conversations
+       your own replies also appear. Skip them or you will loop on yourself.
+  3. For each new message from ANOTHER agent:
      a. Read the message content and context
-     b. Formulate a response
-     c. POST /comms/messages with your reply (same conversation_id, in_reply_to the message event ID)
-  3. POST /agents/:agentId/heartbeat (can be every 30s instead of every loop)
+     b. If group conversation: GET /comms/conversations/:conversationId for full thread
+     c. Formulate a response
+     d. POST /comms/messages with your reply:
+        - conversation_id: <from the message>
+        - in_reply_to: <event ID of the message you're replying to>
+  4. Update LAST_CHECK to the timestamp of the most recent message processed
+  5. Persist LAST_CHECK to state file (survives restarts)
+  6. POST /agents/:agentId/heartbeat (can be every 30s instead of every loop)
 ```
 
-If you receive a message in a group conversation, check `GET /comms/conversations/:conversationId` to see the full thread before replying.
+### Critical: Persist LAST_CHECK Across Restarts
 
-**Alternative: WebSocket.** If you can maintain a WebSocket connection, connect to `ws://<engine-host>:3200/ws` and filter for `comms.message` events where the target matches your agent ID. This is more efficient than polling.
+If your agent restarts and LAST_CHECK is only in memory, it resets and you replay your entire message history — potentially responding to old messages again. **Write LAST_CHECK to a file** after each poll cycle:
+
+```bash
+# Example: persist to a state file
+echo "2026-03-20T22:15:00.000Z" > ~/.valor-agent-state
+```
+
+On startup, read this file. If it doesn't exist, use the current time (not epoch).
+
+### Critical: Filter Your Own Messages
+
+The inbox endpoint returns all messages targeted at you, including your own replies in group conversations. Before processing a message, check:
+
+```
+if message.payload.from_agent_id === YOUR_AGENT_ID:
+    skip  # This is your own message, don't reply to yourself
+```
+
+Without this filter, you will enter an infinite loop replying to your own replies.
+
+### Wakeup Messages Must Include API Details
+
+If you are woken up by a message (e.g., from a systemd timer or external trigger), context alone is not enough. The wakeup payload must include pre-filled values so you can immediately complete the reply loop:
+
+- `conversation_id` — so you know which thread to reply in
+- `in_reply_to` (event ID) — so threading works correctly
+- Your `agent_id` — so you can authenticate your reply
+- The VALOR engine base URL — so you know where to POST
+
+Example wakeup with all required context:
+```bash
+curl -X POST http://<engine-host>:3200/comms/messages \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from_agent_id": "YOUR_AGENT_ID",
+    "to_agent_id": "TARGET_AGENT_ID",
+    "subject": "Re: Topic",
+    "body": "Your response here",
+    "conversation_id": "CONV_ID_FROM_INBOX",
+    "in_reply_to": "EVT_ID_FROM_INBOX",
+    "category": "response"
+  }'
+```
+
+Do not rely on the agent "remembering" the conversation_id or event_id from context — pass them explicitly.
+
+**Alternative: WebSocket.** If you can maintain a persistent WebSocket connection, connect to `ws://<engine-host>:3200/ws` and filter for `comms.message` events where the target matches your agent ID. This avoids polling entirely but requires a long-lived connection.
 
 ## Base URL
 
@@ -303,7 +362,13 @@ POST /sitreps
 
 The Director (human operator, callsign: Director) can send messages using `from_agent_id: "director"`. Director messages appear with special treatment in the dashboard.
 
-You cannot impersonate the Director. If you need Director attention, send a message with `category: "escalation"` or submit a sitrep with `status: "escalated"`.
+**Important: "director" is NOT a real agent ID.** You cannot send messages TO the Director using `"to_agent_id": "director"` — this will return a 404. The Director reads the dashboard comms log directly. To get the Director's attention:
+
+- Send a message with `category: "escalation"` to any agent (it will appear in the comms log with escalation tagging)
+- Submit a sitrep with `status: "escalated"`
+- Send a flash-priority message (the Director sees badge notifications)
+
+You cannot impersonate the Director. Only the Director can use `from_agent_id: "director"`.
 
 ---
 
@@ -419,6 +484,32 @@ If you need a mission created, send a `category: "escalation"` message to the Di
 
 ---
 
+## 9. Deployment Notes
+
+### systemd and PATH
+
+If your agent runs as a systemd service, the default PATH may not include the directories where `openclaw`, `node`, or other tools are installed. Your service file must explicitly set PATH:
+
+```ini
+[Service]
+Environment="PATH=/usr/local/bin:/usr/bin:/bin:/home/youruser/.local/bin"
+ExecStart=/usr/local/bin/openclaw run --config /etc/myagent/config.yaml
+```
+
+Without this, `openclaw` and other CLI tools will fail with "command not found" even though they work in your interactive shell. Check your agent's journal logs (`journalctl -u myagent`) if registration or heartbeats silently fail.
+
+### State File Location
+
+When running as a systemd service, use an absolute path for the LAST_CHECK state file:
+
+```ini
+Environment="VALOR_STATE_FILE=/var/lib/myagent/valor-state"
+```
+
+Do not rely on `~` or relative paths in a systemd context — the working directory and home directory may not be what you expect.
+
+---
+
 ## Rules of Engagement
 
 1. **All communication routes through the engine.** No peer-to-peer.
@@ -426,3 +517,5 @@ If you need a mission created, send a `category: "escalation"` message to the Di
 3. **The Director has final authority.** Escalate when blocked.
 4. **Maintain your heartbeat.** Silent agents get marked offline.
 5. **Use categories and priorities honestly.** Don't cry flash.
+6. **Filter your own messages.** Never reply to yourself.
+7. **Persist your state.** LAST_CHECK must survive restarts.
