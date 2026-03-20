@@ -10,6 +10,7 @@ import {
   createApproval,
   getPendingApproval,
   appendAuditEntry,
+  getDivisionLead,
 } from "../db/index.js";
 import { evaluateGates } from "../gates/index.js";
 import type { GateContext } from "../gates/types.js";
@@ -18,13 +19,28 @@ import { supervise } from "../stream/supervisor.js";
 import { subscribe } from "../bus/index.js";
 import { estimateCost } from "../providers/cost.js";
 import type { Mission } from "../types/index.js";
+import { dispatchWebhook } from "../dispatch/webhook.js";
+import { config } from "../config.js";
 
-/** Dispatch a mission through the gate system and, if approved, to a provider. */
-export function dispatchMission(missionId: string): {
+/** Resolve which agent should execute a mission.
+ *  Priority: assigned_agent_id → division lead → null (direct provider) */
+function resolveExecutingAgent(mission: Mission) {
+  if (mission.assigned_agent_id) {
+    return getAgent(mission.assigned_agent_id);
+  }
+  if (mission.division_id) {
+    const lead = getDivisionLead(mission.division_id);
+    if (lead) return getAgent(lead.agent_id);
+  }
+  return null;
+}
+
+/** Dispatch a mission through the gate system and, if approved, to an agent or provider. */
+export async function dispatchMission(missionId: string): Promise<{
   dispatched: boolean;
   reason: string;
   mission: Mission;
-} {
+}> {
   const mission = getMission(missionId);
   if (!mission) throw new Error(`Mission not found: ${missionId}`);
 
@@ -38,8 +54,8 @@ export function dispatchMission(missionId: string): {
     transitionMission(missionId, "gated");
   }
 
-  // Build gate context
-  const agent = mission.assigned_agent_id ? getAgent(mission.assigned_agent_id) : null;
+  // Resolve the executing agent (assigned directly, or division lead)
+  const agent = resolveExecutingAgent(mission);
   const division = mission.division_id ? getDivision(mission.division_id) : null;
   const activeMissions = listMissions({ status: "streaming" }).length
     + listMissions({ status: "dispatched" }).length;
@@ -58,7 +74,7 @@ export function dispatchMission(missionId: string): {
     agent,
     division,
     activeMissionCount: activeMissions,
-    maxParallelMissions: 10, // TODO: make configurable
+    maxParallelMissions: 10,
     budgetLimitUsd: division?.autonomy_policy.max_cost_autonomous_usd ?? 0,
     approvalStatus,
   };
@@ -100,7 +116,54 @@ export function dispatchMission(missionId: string): {
     return { dispatched: false, reason: `Blocked by gates: ${reasons}`, mission: updated };
   }
 
-  // All gates passed — find a provider and dispatch
+  // ── Path A: agent with endpoint_url → webhook dispatch ───────────
+  if (agent?.endpoint_url) {
+    const dispatched = transitionMission(missionId, "dispatched");
+
+    appendAuditEntry({
+      entity_type: "mission",
+      entity_id: missionId,
+      operation: "update",
+      before_state: JSON.stringify({ status: "gated" }),
+      after_state: JSON.stringify({ status: "dispatched", agent: agent.id, mode: "webhook" }),
+      actor_id: "orchestrator",
+    });
+
+    publish({
+      type: "mission.dispatched",
+      source: { id: "orchestrator", type: "system" },
+      target: { id: agent.id, type: "agent" },
+      conversation_id: null,
+      in_reply_to: null,
+      payload: { mission_id: missionId, agent_id: agent.id, mode: "webhook" },
+      metadata: null,
+    });
+
+    const callbackBase = `http://localhost:${config.port}`;
+    const result = await dispatchWebhook(missionId, agent.id, callbackBase);
+
+    if (!result.delivered) {
+      logger.warn("Webhook delivery failed — mission left in dispatched", {
+        mission_id: missionId,
+        agent_id: agent.id,
+        error: result.error,
+      });
+    } else {
+      logger.info("Mission dispatched via webhook", {
+        mission_id: missionId,
+        agent_id: agent.id,
+        endpoint: result.endpoint_url,
+      });
+    }
+
+    return {
+      dispatched: result.delivered,
+      reason: result.delivered ? `Dispatched to agent ${agent.callsign} via webhook` : `Webhook delivery failed: ${result.error}`,
+      mission: getMission(missionId)!,
+    };
+  }
+
+  // ── Path B: no agent endpoint → direct provider stream ───────────
   const provider = getBestProvider({
     model: agent?.model ?? undefined,
     capabilities: { streaming: true },
@@ -109,7 +172,7 @@ export function dispatchMission(missionId: string): {
   if (!provider) {
     return {
       dispatched: false,
-      reason: "No suitable provider available",
+      reason: "No agent endpoint and no provider available",
       mission: getMission(missionId)!,
     };
   }
@@ -122,7 +185,7 @@ export function dispatchMission(missionId: string): {
     entity_id: missionId,
     operation: "update",
     before_state: JSON.stringify({ status: "gated" }),
-    after_state: JSON.stringify({ status: "dispatched", provider: provider.id }),
+    after_state: JSON.stringify({ status: "dispatched", provider: provider.id, mode: "direct" }),
     actor_id: "orchestrator",
   });
 
@@ -132,16 +195,18 @@ export function dispatchMission(missionId: string): {
     target: null,
     conversation_id: null,
     in_reply_to: null,
-    payload: { mission_id: missionId, provider: provider.id },
+    payload: { mission_id: missionId, provider: provider.id, mode: "direct" },
     metadata: null,
   });
 
-  // Start streaming
+  // Build prompt from persona if agent has one loaded
+  const systemPrompt = `You are executing a mission.\nTitle: ${dispatched.title}\nObjective: ${dispatched.objective}${dispatched.constraints.length ? `\nConstraints:\n${dispatched.constraints.map((c) => `- ${c}`).join("\\n")}` : ""}${dispatched.deliverables.length ? `\nDeliverables:\n${dispatched.deliverables.map((d) => `- ${d}`).join("\\n")}` : ""}${dispatched.success_criteria.length ? `\nSuccess criteria:\n${dispatched.success_criteria.map((s) => `- ${s}`).join("\\n")}` : ""}`;
+
   const stream = provider.stream({
-    model: agent?.model ?? "claude-sonnet-4-20250514",
+    model: agent?.model ?? "claude-sonnet-4-5",
     messages: [{ role: "user", content: dispatched.objective }],
     max_tokens: 4096,
-    system: `You are executing a mission. Title: ${dispatched.title}\nObjective: ${dispatched.objective}\nConstraints: ${dispatched.constraints.join(", ")}`,
+    system: systemPrompt,
   });
 
   // Transition to streaming
@@ -150,9 +215,9 @@ export function dispatchMission(missionId: string): {
   // Supervise the stream
   supervise(missionId, stream);
 
-  logger.info("Mission dispatched", { mission_id: missionId, provider: provider.id });
+  logger.info("Mission dispatched via direct provider", { mission_id: missionId, provider: provider.id });
 
-  return { dispatched: true, reason: "Dispatched to provider", mission: getMission(missionId)! };
+  return { dispatched: true, reason: `Dispatched via provider ${provider.id}`, mission: getMission(missionId)! };
 }
 
 /** Handle mission completion — called when stream supervisor emits stream.completed. */

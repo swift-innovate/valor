@@ -86,9 +86,9 @@ function createTestMission() {
 }
 
 describe("Orchestrator", () => {
-  it("rejects dispatch of draft missions", () => {
+  it("rejects dispatch of draft missions", async () => {
     const mission = createTestMission();
-    const result = dispatchMission(mission.id);
+    const result = await dispatchMission(mission.id);
     expect(result.dispatched).toBe(false);
     expect(result.reason).toContain("draft");
   });
@@ -98,24 +98,24 @@ describe("Orchestrator", () => {
     const mission = createTestMission();
     transitionMission(mission.id, "queued");
 
-    const result = dispatchMission(mission.id);
+    const result = await dispatchMission(mission.id);
     expect(result.dispatched).toBe(true);
 
     const updated = getMission(mission.id);
     expect(updated!.status).toBe("streaming");
   });
 
-  it("blocks when no provider available", () => {
+  it("blocks when no provider available", async () => {
     // No providers registered
     const mission = createTestMission();
     transitionMission(mission.id, "queued");
 
-    const result = dispatchMission(mission.id);
+    const result = await dispatchMission(mission.id);
     expect(result.dispatched).toBe(false);
-    expect(result.reason).toContain("No suitable provider");
+    expect(result.reason).toContain("No agent endpoint and no provider");
   });
 
-  it("blocks when revision cap reached", () => {
+  it("blocks when revision cap reached", async () => {
     registerProvider(mockProvider());
     const mission = createMission({
       division_id: null,
@@ -138,7 +138,7 @@ describe("Orchestrator", () => {
     });
     transitionMission(mission.id, "queued");
 
-    const result = dispatchMission(mission.id);
+    const result = await dispatchMission(mission.id);
     expect(result.dispatched).toBe(false);
     expect(result.reason).toContain("revision_cap");
   });
@@ -150,7 +150,7 @@ describe("Orchestrator", () => {
 
     const mission = createTestMission();
     transitionMission(mission.id, "queued");
-    dispatchMission(mission.id);
+    await dispatchMission(mission.id);
 
     expect(events.some((e) => e.type === "mission.dispatched")).toBe(true);
   });

@@ -168,13 +168,13 @@ missionRoutes.post("/:id/queue", (c) => {
   return c.json(getMission(mission.id));
 });
 
-// Dispatch a mission (evaluate gates + send to provider)
-missionRoutes.post("/:id/dispatch", (c) => {
+// Dispatch a mission (evaluate gates + send to agent or provider)
+missionRoutes.post("/:id/dispatch", async (c) => {
   const denied = requireDirector(c);
   if (denied) return denied;
 
   try {
-    const result = dispatchMission(c.req.param("id"));
+    const result = await dispatchMission(c.req.param("id"));
     const status = result.dispatched ? 200 : 202;
     return c.json(result, status);
   } catch (err) {
