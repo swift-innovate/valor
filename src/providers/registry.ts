@@ -23,8 +23,10 @@ export function getProvidersByType(type: ProviderType): ProviderAdapter[] {
 
 export function getBestProvider(criteria: DispatchCriteria): ProviderAdapter | undefined {
   const candidates = [...providers.values()].filter((p) => {
-    // Filter by model support
-    if (criteria.model && !p.capabilities.models.includes(criteria.model)) return false;
+    // Filter by model support.
+    // Empty models list means the provider hasn't been health-checked yet —
+    // treat as "accepts any model" rather than "accepts none".
+    if (criteria.model && p.capabilities.models.length > 0 && !p.capabilities.models.includes(criteria.model)) return false;
 
     // Filter by required capabilities
     if (criteria.capabilities) {
@@ -38,9 +40,9 @@ export function getBestProvider(criteria: DispatchCriteria): ProviderAdapter | u
 
   if (candidates.length === 0) return undefined;
 
-  // Prefer local providers (herd) when requested
+  // Prefer local providers (ollama) when requested
   if (criteria.preferLocal) {
-    const local = candidates.find((p) => p.type === "herd");
+    const local = candidates.find((p) => p.type === "ollama");
     if (local) return local;
   }
 

@@ -14,7 +14,7 @@ function mockProvider(overrides: Partial<ProviderAdapter> = {}): ProviderAdapter
   return {
     id: "test_provider",
     name: "Test Provider",
-    type: "cloud_api",
+    type: "claude_api",
     capabilities: {
       streaming: true,
       toolUse: true,
@@ -58,10 +58,10 @@ describe("ProviderRegistry", () => {
   });
 
   it("filters by type", () => {
-    registerProvider(mockProvider({ id: "cloud", type: "cloud_api" }));
-    registerProvider(mockProvider({ id: "local", type: "herd" }));
-    expect(getProvidersByType("cloud_api")).toHaveLength(1);
-    expect(getProvidersByType("herd")).toHaveLength(1);
+    registerProvider(mockProvider({ id: "cloud", type: "claude_api" }));
+    registerProvider(mockProvider({ id: "local", type: "ollama" }));
+    expect(getProvidersByType("claude_api")).toHaveLength(1);
+    expect(getProvidersByType("ollama")).toHaveLength(1);
   });
 
   it("finds best provider by model", () => {
@@ -85,8 +85,8 @@ describe("ProviderRegistry", () => {
   });
 
   it("prefers local when requested", () => {
-    registerProvider(mockProvider({ id: "cloud", type: "cloud_api" }));
-    registerProvider(mockProvider({ id: "local", type: "herd" }));
+    registerProvider(mockProvider({ id: "cloud", type: "claude_api" }));
+    registerProvider(mockProvider({ id: "local", type: "ollama" }));
 
     const best = getBestProvider({ preferLocal: true });
     expect(best?.id).toBe("local");
@@ -101,5 +101,34 @@ describe("ProviderRegistry", () => {
     }));
 
     expect(getBestProvider({ model: "gpt-4" })).toBeUndefined();
+  });
+
+  it("provider with empty models list matches any model request", () => {
+    // Empty models = not yet health-checked, treat as "accepts any"
+    registerProvider(mockProvider({
+      id: "ollama_unchecked",
+      type: "ollama",
+      capabilities: {
+        streaming: true, toolUse: false, vision: false,
+        maxContextTokens: 128000, models: [],
+      },
+    }));
+
+    const best = getBestProvider({ model: "llama3.1:8b" });
+    expect(best?.id).toBe("ollama_unchecked");
+  });
+
+  it("provider with populated models list excludes non-matching model", () => {
+    registerProvider(mockProvider({
+      id: "ollama_checked",
+      type: "ollama",
+      capabilities: {
+        streaming: true, toolUse: false, vision: false,
+        maxContextTokens: 128000, models: ["llama3.1:8b"],
+      },
+    }));
+
+    expect(getBestProvider({ model: "mistral:7b" })).toBeUndefined();
+    expect(getBestProvider({ model: "llama3.1:8b" })?.id).toBe("ollama_checked");
   });
 });

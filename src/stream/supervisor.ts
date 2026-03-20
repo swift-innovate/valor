@@ -115,9 +115,24 @@ async function processStream(
             mission_id: session.mission_id,
             data: event.data,
           });
+          // Fail immediately after accumulating too many errors rather than
+          // waiting for the iterator to exhaust or a completion event.
+          if (session.total_errors >= 3) {
+            handleStreamFailure(
+              session,
+              `Too many stream errors (${session.total_errors})`,
+            );
+            return;
+          }
           break;
 
         case "completion":
+          if (session.total_errors > 0) {
+            logger.warn("Completion received after stream errors", {
+              mission_id: session.mission_id,
+              total_errors: session.total_errors,
+            });
+          }
           handleStreamComplete(session);
           return;
       }

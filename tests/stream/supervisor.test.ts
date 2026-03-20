@@ -155,6 +155,48 @@ describe("StreamSupervisor", () => {
     expect(abort("mis_nonexistent", "test")).toBe(false);
   });
 
+  it("error-only stream (no completion) triggers failure, not completion", async () => {
+    const busEvents: EventEnvelope[] = [];
+    subscribe("stream.*", (e) => busEvents.push(e));
+
+    // Adapter pattern: error event then iterator exhausts — no completion event
+    const events = [
+      streamEvent("s1", 0, "heartbeat"),
+      streamEvent("s1", 1, "error", { error: "provider transport failure" }),
+    ];
+
+    supervise("mis_test7", makeStream(events));
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(busEvents.find((e) => e.type === "stream.completed")).toBeUndefined();
+    const failed = busEvents.find((e) => e.type === "stream.failed");
+    expect(failed).toBeDefined();
+    expect(failed!.payload.reason as string).toContain("error");
+  });
+
+  it("3 or more error events trigger immediate failure", async () => {
+    const busEvents: EventEnvelope[] = [];
+    subscribe("stream.*", (e) => busEvents.push(e));
+
+    const events = [
+      streamEvent("s1", 0, "heartbeat"),
+      streamEvent("s1", 1, "error", { error: "err1" }),
+      streamEvent("s1", 2, "error", { error: "err2" }),
+      streamEvent("s1", 3, "error", { error: "err3" }),
+      // A completion after 3 errors should never be reached
+      streamEvent("s1", 4, "completion"),
+    ];
+
+    supervise("mis_test8", makeStream(events));
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(busEvents.find((e) => e.type === "stream.completed")).toBeUndefined();
+    const failed = busEvents.find((e) => e.type === "stream.failed");
+    expect(failed).toBeDefined();
+    expect(failed!.payload.reason as string).toContain("Too many stream errors");
+    expect(failed!.payload.total_errors).toBe(3);
+  });
+
   it("tracks active sessions", async () => {
     // Slow stream to keep it active
     const events = [
