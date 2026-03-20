@@ -25,4 +25,4 @@ export {
 export { estimateCost, formatCost, getModelPricing, getContextWindow, listModels } from "./cost.js";
 
 export { createClaudeAdapter, type ClaudeAdapterConfig } from "./adapters/claude-adapter.js";
-export { createHerdAdapter, type HerdAdapterConfig } from "./adapters/herd-adapter.js";
+export { createOllamaAdapter, type OllamaAdapterConfig } from "./adapters/ollama-adapter.js";

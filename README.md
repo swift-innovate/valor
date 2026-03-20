@@ -1,0 +1,77 @@
+# VALOR Engine
+
+> Unified AI Agent Orchestration Platform
+
+VALOR Engine is a standalone orchestration authority for AI agent fleets. It manages missions, control gates, stream supervision, divisions, and decision checkpoints — without hosting or running agents directly.
+
+## Scope Boundary
+
+VALOR Engine is **self-contained**. It has NO hard dependencies on:
+
+- **Engram** — Separate memory system. VALOR manages its own state via SQLite.
+- **Herd Pro** — Separate LLM gateway. VALOR's Provider Layer speaks standard protocols (Anthropic API, Ollama HTTP).
+- **Operative** — Separate persona/runtime framework. VALOR has its own Identity Layer.
+
+A user who points VALOR at a direct Anthropic API key gets a fully functional engine with zero additional SIT dependencies.
+
+## Quick Start
+
+```bash
+cp .env.example .env
+# Add your ANTHROPIC_API_KEY
+pnpm install
+pnpm dev
+```
+
+## Architecture
+
+7-layer engine:
+
+1. **Core Engine** — Mission lifecycle, stream supervision, failure routing, WAL
+2. **Provider Layer** — Claude API, Ollama, OpenClaw, Home Assistant, custom adapters
+3. **Identity Layer** — SSOP-typed persona registry
+4. **Memory Layer** — Namespaced per-division state
+5. **Decision Layer** — VECTOR Method checkpoints and bias scoring
+6. **Communication Bus** — Typed EventEnvelope pub/sub with guaranteed delivery
+7. **Division Schema** — Registration, autonomy policies, escalation rules
+
+## Providers
+
+Configure via environment variables:
+
+| Provider | Env Var | Protocol |
+|----------|---------|----------|
+| Anthropic Claude | `ANTHROPIC_API_KEY` | Anthropic Messages API |
+| Ollama (local) | `OLLAMA_BASE_URL` | Standard Ollama HTTP |
+
+The provider layer is runtime-agnostic. Add custom adapters by implementing the `ProviderAdapter` interface.
+
+## Test Suite
+
+```bash
+pnpm test
+```
+
+## API
+
+Default port: `3200`
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /health` | Engine health + provider status |
+| `GET /providers` | Registered provider list |
+| `GET /skill.md` | Agent integration guide (live markdown) |
+| `/agent-cards/*` | Agent registration cards + approval flow |
+| `/agents/*` | Agent roster, heartbeat, health |
+| `/comms/*` | Inter-agent messaging, conversations, group chats |
+| `/artifacts/*` | Shared content (code, configs, docs) between agents |
+| `/missions/*` | Mission CRUD, dispatch, approve, abort |
+| `/divisions/*` | Division CRUD, agent roster |
+| `/personas/*` | Persona CRUD |
+| `/decisions/*` | VECTOR analysis, checkpoints |
+| `/sitreps/*` | Situation reports |
+| `/dashboard/*` | Web UI (comms log, agent cards, artifacts, missions, approvals) |
+
+## License
+
+MIT — see [LICENSE](LICENSE)

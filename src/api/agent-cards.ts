@@ -12,7 +12,7 @@ import { AgentRuntime } from "../types/index.js";
 
 export const agentCardRoutes = new Hono();
 
-// List all cards (filterable by ?status=pending&callsign=Gage&operator=SIT)
+// List all cards (filterable by ?status=pending&callsign=Alpha&operator=MyOrg)
 agentCardRoutes.get("/", (c) => {
   const approval_status = c.req.query("status") || undefined;
   const callsign = c.req.query("callsign") || undefined;
@@ -41,19 +41,26 @@ agentCardRoutes.post("/", async (c) => {
     return c.json({ error: `Invalid runtime. Must be one of: ${AgentRuntime.options.join(", ")}` }, 400);
   }
 
-  const card = submitCard({
-    callsign: body.callsign,
-    name: body.name,
-    operator: body.operator,
-    version: body.version,
-    primary_skills: body.primary_skills ?? [],
-    runtime: body.runtime,
-    model: body.model ?? null,
-    endpoint_url: body.endpoint_url ?? null,
-    description: body.description ?? "",
-  });
-
-  return c.json(card, 201);
+  try {
+    const card = submitCard({
+      callsign: body.callsign,
+      name: body.name,
+      operator: body.operator,
+      version: body.version,
+      primary_skills: body.primary_skills ?? [],
+      runtime: body.runtime,
+      model: body.model ?? null,
+      endpoint_url: body.endpoint_url ?? null,
+      description: body.description ?? "",
+    });
+    return c.json(card, 201);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    if (message.includes("already registered") || message.includes("already has a pending")) {
+      return c.json({ error: message }, 409);
+    }
+    throw err;
+  }
 });
 
 // Update a pending card

@@ -29,8 +29,8 @@ function healthBadge(status: AgentStatus) {
 const RUNTIME_COLORS: Record<string, string> = {
   claude_api: "bg-purple-900 text-purple-300",
   openclaw:   "bg-blue-900 text-blue-300",
-  herd:       "bg-green-900 text-green-300",
-  ollama:     "bg-emerald-900 text-emerald-300",
+  ollama:     "bg-green-900 text-green-300",
+  openai_api: "bg-emerald-900 text-emerald-300",
   custom:     "bg-gray-700 text-gray-300",
 };
 
@@ -100,13 +100,22 @@ function agentCard(agent: Agent) {
           <span class="text-gray-400">${timeSince(agent.last_heartbeat)}</span>
         </div>
         ${agent.capabilities.length > 0
-          ? html`<div class="flex flex-wrap gap-1">
+          ? html`<div class="flex flex-wrap gap-1 mb-3">
               ${agent.capabilities.map(
                 (cap) =>
                   html`<span class="text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">${cap}</span>`,
               )}
             </div>`
           : ""}
+      </div>
+
+      <!-- Actions -->
+      <div class="mt-3 pt-3 border-t border-gray-800 flex justify-end">
+        <button
+          onclick="if(confirm('Remove agent ${agent.callsign}? This cannot be undone.')) fetch('/agents/${agent.id}', {method:'DELETE'}).then(r => { if(r.ok) location.reload(); else r.json().then(d => alert(d.error || 'Failed')); })"
+          class="px-3 py-1 text-xs font-medium rounded bg-red-900 hover:bg-red-700 text-red-300 transition-colors">
+          Remove
+        </button>
       </div>
     </div>`;
 }

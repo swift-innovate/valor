@@ -23,7 +23,7 @@ export function createClaudeAdapter(config: ClaudeAdapterConfig): ProviderAdapte
   const adapter: ProviderAdapter = {
     id: "claude_api",
     name: "Direct Claude API",
-    type: "cloud_api" as ProviderType,
+    type: "claude_api" as ProviderType,
     capabilities: {
       streaming: true,
       toolUse: true,

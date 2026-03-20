@@ -11,3 +11,4 @@ export * from "./wal.js";
 export * from "./vector.js";
 export * from "./agent-card.js";
 export * from "./comms.js";
+export * from "./artifact.js";

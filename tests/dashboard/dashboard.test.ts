@@ -10,6 +10,8 @@ import {
   createApproval,
   createDecision,
 } from "../../src/db/index.js";
+import { createArtifact } from "../../src/db/repositories/artifact-repo.js";
+import { sendMessage, generateConversationId } from "../../src/db/repositories/comms-repo.js";
 import { analyzeDecision } from "../../src/vector/index.js";
 
 // Mount dashboard routes at /dashboard like the real server
@@ -301,6 +303,112 @@ describe("Decisions page", () => {
     const html = await res.text();
     expect(html).toContain("New feature decision");
     expect(html).toContain("Analyze"); // analyze button
+  });
+});
+
+// ── Artifacts page ───────────────────────────────────────────────────
+
+describe("Artifacts page", () => {
+  it("renders empty state", async () => {
+    const res = await get("/dashboard/artifacts");
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Artifacts");
+    expect(html).toContain("No artifacts yet");
+  });
+
+  it("renders artifact list", async () => {
+    createArtifact({
+      title: "bridge.ts",
+      content_type: "code",
+      language: "typescript",
+      content: "export function bridge() {}\n",
+      summary: "Bridge module",
+      created_by: "director",
+      conversation_id: null,
+    });
+
+    const res = await get("/dashboard/artifacts");
+    const html = await res.text();
+    expect(html).toContain("bridge.ts");
+    expect(html).toContain("code");
+    expect(html).toContain("typescript");
+    expect(html).toContain("Bridge module");
+  });
+
+  it("renders artifact content in detail panel", async () => {
+    const artifact = createArtifact({
+      title: "script.py",
+      content_type: "code",
+      language: "python",
+      content: "def hello():\n    return 'world'\n",
+      summary: null,
+      created_by: "director",
+      conversation_id: null,
+    });
+
+    const res = await get(`/dashboard/artifacts?id=${artifact.id}`);
+    const html = await res.text();
+    expect(html).toContain("script.py");
+    expect(html).toContain("hello()");
+  });
+});
+
+// ── Comms: artifact rendering inline ────────────────────────────────
+
+describe("Comms page: artifact rendering", () => {
+  it("renders artifact inline when message has attachment", async () => {
+    const gage = createAgent({
+      callsign: "Gage",
+      runtime: "claude_api",
+      division_id: null,
+      endpoint_url: null,
+      model: null,
+      persona_id: null,
+      capabilities: [],
+      health_status: "registered",
+      last_heartbeat: null,
+    });
+    const mira = createAgent({
+      callsign: "Mira",
+      runtime: "claude_api",
+      division_id: null,
+      endpoint_url: null,
+      model: null,
+      persona_id: null,
+      capabilities: [],
+      health_status: "registered",
+      last_heartbeat: null,
+    });
+
+    const artifact = createArtifact({
+      title: "fix.ts",
+      content_type: "code",
+      language: "typescript",
+      content: "const x = 42;\n",
+      summary: "Quick fix",
+      created_by: gage.id,
+      conversation_id: null,
+    });
+
+    const convId = generateConversationId();
+    sendMessage({
+      from_agent_id: gage.id,
+      to_agent_id: mira.id,
+      subject: "Check this fix",
+      body: "See attached.",
+      priority: "routine",
+      category: "request",
+      conversation_id: convId,
+      in_reply_to: null,
+      attachments: [artifact.id],
+    });
+
+    const res = await get(`/dashboard/comms?conv=${convId}`);
+    const html = await res.text();
+    expect(html).toContain("fix.ts");
+    expect(html).toContain("const x = 42;");
+    expect(html).toContain("Quick fix");
   });
 });
 

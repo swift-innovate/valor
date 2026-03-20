@@ -82,6 +82,15 @@ export {
 } from "./comms-repo.js";
 
 export {
+  createArtifact,
+  getArtifact,
+  updateArtifact,
+  listArtifacts,
+  listArtifactsByConversation,
+  deleteArtifact,
+} from "./artifact-repo.js";
+
+export {
   createDecision,
   getDecision,
   listDecisions,

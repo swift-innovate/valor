@@ -31,6 +31,9 @@ export const CommsMessageSchema = z.object({
 
   // Classification
   category: CommsCategory,
+
+  // Attachments — artifact IDs to display inline with this message
+  attachments: z.array(z.string()).default([]),
 });
 export type CommsMessage = z.infer<typeof CommsMessageSchema>;
 

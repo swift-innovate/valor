@@ -1,5 +1,6 @@
 import { getDb } from "../database.js";
 import { getAgent, listAgents } from "./agent-repo.js";
+import { getArtifact } from "./artifact-repo.js";
 import { publish } from "../../bus/event-bus.js";
 import { type EventEnvelope } from "../../types/index.js";
 import type { CommsMessage, CommsConversation } from "../../types/comms.js";
@@ -74,6 +75,13 @@ export function sendMessage(input: CommsMessage): EventEnvelope {
     }
   }
 
+  // Validate attachments — each ID must reference an existing artifact
+  const attachments = input.attachments ?? [];
+  for (const artId of attachments) {
+    const artifact = getArtifact(artId);
+    if (!artifact) throw new Error(`Artifact not found: ${artId}`);
+  }
+
   const source =
     input.from_agent_id === "director"
       ? { id: "director", type: "director" as const }
@@ -93,6 +101,7 @@ export function sendMessage(input: CommsMessage): EventEnvelope {
     body: input.body,
     priority: input.priority,
     category: input.category,
+    attachments,
   };
 
   // Check if this is the first message in this conversation (before publishing)

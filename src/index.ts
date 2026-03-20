@@ -13,7 +13,7 @@ import {
   createOllamaAdapter,
 } from "./providers/index.js";
 import { getActiveSessions, stopHealthMonitor, startHealthMonitor } from "./stream/index.js";
-import { missionRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes, sitrepRoutes, agentCardRoutes, commsRoutes } from "./api/index.js";
+import { missionRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes, sitrepRoutes, agentCardRoutes, commsRoutes, artifactRoutes } from "./api/index.js";
 import { dashboardRoutes } from "./dashboard/index.js";
 import { attachWebSocket, closeWebSocket } from "./ws/index.js";
 import { initOrchestratorListeners } from "./orchestrator/index.js";
@@ -51,9 +51,27 @@ app.route("/decisions", decisionRoutes);
 app.route("/sitreps", sitrepRoutes);
 app.route("/agent-cards", agentCardRoutes);
 app.route("/comms", commsRoutes);
+app.route("/artifacts", artifactRoutes);
 
 // Dashboard
 app.route("/dashboard", dashboardRoutes);
+
+// Agent skill document — served as raw markdown for agent onboarding
+// Usage: point any agent at http://host:3200/skill.md
+import { readFileSync } from "fs";
+import { resolve } from "path";
+
+const skillMdPath = resolve(import.meta.dirname ?? ".", "..", "SKILL.md");
+
+app.get("/skill.md", (c) => {
+  try {
+    const content = readFileSync(skillMdPath, "utf-8");
+    c.header("Content-Type", "text/markdown; charset=utf-8");
+    return c.text(content);
+  } catch {
+    return c.text("SKILL.md not found", 404);
+  }
+});
 
 // Providers endpoint
 app.get("/providers", (c) => {

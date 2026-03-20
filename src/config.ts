@@ -5,8 +5,8 @@ const ConfigSchema = z.object({
   dbPath: z.string().min(1).default("./data/valor.db"),
   logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
   anthropicApiKey: z.string().optional(),
-  herdBaseUrl: z.string().optional(),
-  herdStatusUrl: z.string().optional(),
+  ollamaBaseUrl: z.string().optional(),
+  ollamaStatusUrl: z.string().optional(),
   sigintUrl: z.string().url().default("http://localhost:8082"),
   disabledGates: z
     .string()
@@ -21,8 +21,8 @@ export const config: Config = ConfigSchema.parse({
   dbPath: process.env.VALOR_DB_PATH,
   logLevel: process.env.LOG_LEVEL,
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
-  herdBaseUrl: process.env.HERD_BASE_URL,
-  herdStatusUrl: process.env.HERD_STATUS_URL,
+  ollamaBaseUrl: process.env.OLLAMA_BASE_URL,
+  ollamaStatusUrl: process.env.OLLAMA_STATUS_URL,
   sigintUrl: process.env.SIGINT_URL,
   disabledGates: process.env.DISABLED_GATES,
 });

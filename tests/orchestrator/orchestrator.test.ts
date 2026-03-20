@@ -41,7 +41,7 @@ function mockProvider(): ProviderAdapter {
   return {
     id: "mock_provider",
     name: "Mock",
-    type: "cloud_api",
+    type: "claude_api",
     capabilities: {
       streaming: true,
       toolUse: false,

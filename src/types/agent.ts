@@ -11,9 +11,9 @@ export type AgentStatus = z.infer<typeof AgentStatus>;
 
 export const AgentRuntime = z.enum([
   "openclaw",
-  "herd",
-  "claude_api",
   "ollama",
+  "claude_api",
+  "openai_api",
   "custom",
 ]);
 export type AgentRuntime = z.infer<typeof AgentRuntime>;

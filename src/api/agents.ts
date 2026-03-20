@@ -38,7 +38,17 @@ agentRoutes.get("/:id", (c) => {
 });
 
 // Register a new agent
+// LOCKED: Agents can only be created through the agent card approval flow.
+// Direct registration is restricted to system/director use only.
 agentRoutes.post("/", async (c) => {
+  const role = c.req.header("X-VALOR-Role");
+  if (role !== "director" && role !== "system") {
+    return c.json(
+      { error: "Direct agent registration is not allowed. Submit an agent card at POST /agent-cards instead." },
+      403,
+    );
+  }
+
   const body = await c.req.json();
 
   if (!body.callsign || !body.runtime) {

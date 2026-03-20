@@ -472,6 +472,106 @@ describe("Comms API", () => {
     });
   });
 
+  describe("POST /comms/chats", () => {
+    it("sends opening message to all participants in a 3-way chat", async () => {
+      const gage = makeAgent("Gage");
+      const mira = makeAgent("Mira");
+      const eddie = makeAgent("Eddie");
+
+      const res = await app.request("/comms/chats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          initiated_by: "director",
+          participants: [gage.id, mira.id, eddie.id],
+          subject: "Q2 planning",
+          body: "Let's align on Q2 goals.",
+          priority: "routine",
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      const data = await res.json() as {
+        conversation_id: string;
+        participants: string[];
+        opening_event_id: string;
+      };
+      expect(data.participants).toHaveLength(3);
+      expect(data.opening_event_id).toBeDefined();
+
+      // All three participants should have the message in their inbox
+      const gageInbox = await app.request(`/comms/agents/${gage.id}/inbox`);
+      const miraInbox = await app.request(`/comms/agents/${mira.id}/inbox`);
+      const eddieInbox = await app.request(`/comms/agents/${eddie.id}/inbox`);
+
+      const gageData = await gageInbox.json() as unknown[];
+      const miraData = await miraInbox.json() as unknown[];
+      const eddieData = await eddieInbox.json() as unknown[];
+
+      expect(gageData).toHaveLength(1);
+      expect(miraData).toHaveLength(1);
+      expect(eddieData).toHaveLength(1);
+    });
+
+    it("includes participant roster in the message body", async () => {
+      const gage = makeAgent("Gage");
+      const mira = makeAgent("Mira");
+
+      const res = await app.request("/comms/chats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          initiated_by: "director",
+          participants: [gage.id, mira.id],
+          subject: "Quick sync",
+          body: "Sync up on the deployment.",
+          priority: "routine",
+        }),
+      });
+
+      expect(res.status).toBe(201);
+
+      const inboxRes = await app.request(`/comms/agents/${gage.id}/inbox`);
+      const [msg] = await inboxRes.json() as Array<{ payload: { body: string } }>;
+
+      expect(msg.payload.body).toContain("Participants:");
+      expect(msg.payload.body).toContain(gage.id);
+      expect(msg.payload.body).toContain(mira.id);
+    });
+
+    it("returns 400 if participants list has fewer than 2", async () => {
+      const gage = makeAgent("Gage");
+
+      const res = await app.request("/comms/chats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          initiated_by: "director",
+          participants: [gage.id],
+          subject: "Solo chat",
+        }),
+      });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 if subject is missing", async () => {
+      const gage = makeAgent("Gage");
+      const mira = makeAgent("Mira");
+
+      const res = await app.request("/comms/chats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          initiated_by: "director",
+          participants: [gage.id, mira.id],
+        }),
+      });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe("Filter by limit", () => {
     it("limits conversation results", async () => {
       const gage = makeAgent("Gage");

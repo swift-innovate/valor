@@ -26,6 +26,21 @@ export function submitCard(input: {
   endpoint_url?: string | null;
   description: string;
 }): AgentCard {
+  // Check for existing active card with this callsign
+  const existing = getDb()
+    .prepare(
+      "SELECT id, approval_status FROM agent_cards WHERE callsign = @callsign AND approval_status IN ('pending', 'approved') LIMIT 1",
+    )
+    .get({ callsign: input.callsign }) as { id: string; approval_status: string } | undefined;
+
+  if (existing) {
+    if (existing.approval_status === "approved") {
+      throw new Error(`Callsign "${input.callsign}" is already registered and approved (card: ${existing.id})`);
+    } else {
+      throw new Error(`Callsign "${input.callsign}" already has a pending card (card: ${existing.id})`);
+    }
+  }
+
   const now = new Date().toISOString();
   const id = generateId();
 
@@ -115,6 +130,23 @@ export function updateCard(
   if (!existing) return null;
   if (existing.approval_status !== "pending") return null;
 
+  // If callsign is changing, ensure the new callsign isn't already taken
+  if (updates.callsign && updates.callsign !== existing.callsign) {
+    const conflict = getDb()
+      .prepare(
+        "SELECT id, approval_status FROM agent_cards WHERE callsign = @callsign AND approval_status IN ('pending', 'approved') AND id != @id LIMIT 1",
+      )
+      .get({ callsign: updates.callsign, id }) as { id: string; approval_status: string } | undefined;
+
+    if (conflict) {
+      if (conflict.approval_status === "approved") {
+        throw new Error(`Callsign "${updates.callsign}" is already registered and approved (card: ${conflict.id})`);
+      } else {
+        throw new Error(`Callsign "${updates.callsign}" already has a pending card (card: ${conflict.id})`);
+      }
+    }
+  }
+
   const now = new Date().toISOString();
 
   const merged = { ...existing, ...updates, updated_at: now };
@@ -187,6 +219,25 @@ export function approveCard(id: string, approvedBy: string): AgentCard | null {
     metadata: null,
   });
 
+  // Send a welcome message to the agent's comms inbox so they see
+  // their approval alongside normal messages — no separate polling needed.
+  publish({
+    type: "comms.message",
+    source: { id: approvedBy, type: "director" },
+    target: { id: agent.id, type: "agent" },
+    conversation_id: `card_${card.id}`,
+    in_reply_to: null,
+    payload: {
+      from_agent_id: "director",
+      to_agent_id: agent.id,
+      subject: `Welcome to VALOR, ${card.callsign}`,
+      body: `Your agent card has been approved. Your agent ID is \`${agent.id}\`. You are now cleared for heartbeats, comms, and mission assignment. Review the integration guide at /skill.md if needed.`,
+      priority: "routine",
+      category: "advisory",
+    },
+    metadata: null,
+  });
+
   return card;
 }
 
@@ -213,6 +264,28 @@ export function rejectCard(id: string, reason: string): AgentCard | null {
     conversation_id: null,
     in_reply_to: null,
     payload: { card_id: card.id, callsign: card.callsign, reason },
+    metadata: null,
+  });
+
+  // Notify via comms so the rejection reason is visible if the agent
+  // checks back later after resubmitting and getting approved.
+  // Note: rejected agents don't have an agent_id yet, so we target
+  // the card ID as a reference.
+  publish({
+    type: "comms.message",
+    source: { id: "system", type: "system" },
+    target: null,
+    conversation_id: `card_${card.id}`,
+    in_reply_to: null,
+    payload: {
+      from_agent_id: "director",
+      to_agent_id: null,
+      to_division_id: null,
+      subject: `Agent card rejected: ${card.callsign}`,
+      body: `Your agent card was not approved. Reason: ${reason}`,
+      priority: "routine",
+      category: "advisory",
+    },
     metadata: null,
   });
 
@@ -248,6 +321,26 @@ export function revokeCard(id: string): AgentCard | null {
     payload: { card_id: card.id, callsign: card.callsign, agent_id: existing.agent_id },
     metadata: null,
   });
+
+  // Notify the agent their access has been revoked
+  if (existing.agent_id) {
+    publish({
+      type: "comms.message",
+      source: { id: "system", type: "system" },
+      target: { id: existing.agent_id, type: "agent" },
+      conversation_id: `card_${card.id}`,
+      in_reply_to: null,
+      payload: {
+        from_agent_id: "director",
+        to_agent_id: existing.agent_id,
+        subject: `Access revoked: ${card.callsign}`,
+        body: `Your agent card has been revoked. You are no longer authorized to participate in VALOR operations.`,
+        priority: "flash",
+        category: "advisory",
+      },
+      metadata: null,
+    });
+  }
 
   return card;
 }

@@ -5,3 +5,4 @@ export { agentsPage } from "./agents.js";
 export { decisionsPage } from "./decisions.js";
 export { agentCardsPage } from "./agent-cards.js";
 export { commsPage } from "./comms.js";
+export { artifactsPage } from "./artifacts.js";

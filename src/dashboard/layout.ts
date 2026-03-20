@@ -1,4 +1,4 @@
-import { html } from "hono/html";
+import { html, raw } from "hono/html";
 import type { HtmlEscapedString } from "hono/utils/html";
 
 type HtmlContent = HtmlEscapedString | Promise<HtmlEscapedString>;
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/decisions", label: "Decisions", icon: "zap" },
   { href: "/dashboard/agent-cards", label: "Agent Cards", icon: "id-badge" },
   { href: "/dashboard/comms", label: "Comms", icon: "message-square" },
+  { href: "/dashboard/artifacts", label: "Artifacts", icon: "file-code" },
 ];
 
 export function layout(title: string, activePath: string, content: HtmlContent): HtmlContent {
@@ -55,12 +56,15 @@ export function layout(title: string, activePath: string, content: HtmlContent):
               ${NAV_ITEMS.map(
                 (item) => html`
                 <a href="${item.href}"
-                   class="px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                   id="nav-${item.label.toLowerCase().replace(/\s+/g, '-')}"
+                   class="relative px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                      activePath === item.href
                        ? "bg-gray-800 text-white"
                        : "text-gray-400 hover:text-white hover:bg-gray-800"
                    }">
                   ${item.label}
+                  ${item.label === "Comms" ? html`<span id="comms-badge" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold rounded-full bg-red-500 text-white px-1">0</span>` : ""}
+                  ${item.label === "Agent Cards" ? html`<span id="cards-badge" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold rounded-full bg-yellow-500 text-black px-1">0</span>` : ""}
                 </a>`,
               )}
             </div>
@@ -112,8 +116,42 @@ export function layout(title: string, activePath: string, content: HtmlContent):
       };
     }
 
+    var commsUnread = 0;
+    var cardsUnread = 0;
+    var CURRENT_PAGE = ${raw(JSON.stringify(activePath))};
+
+    function updateBadge(id, count) {
+      var badge = document.getElementById(id);
+      if (!badge) return;
+      if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.style.display = 'flex';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
     function handleEvent(event) {
-      showToast(event.type, 'info');
+      // Comms notification — increment badge when not on comms page
+      if (event.type === 'comms.message' && CURRENT_PAGE !== '/dashboard/comms') {
+        commsUnread++;
+        updateBadge('comms-badge', commsUnread);
+        var who = (event.payload && event.payload.from_agent_id) || 'unknown';
+        var subj = (event.payload && event.payload.subject) || '';
+        showToast('New message from ' + who + (subj ? ': ' + subj : ''), 'info');
+      } else if (event.type === 'comms.message') {
+        // On comms page — don't badge, but still forward to page handler
+      }
+
+      // Agent card notification
+      if (event.type === 'agent.card.submitted' && CURRENT_PAGE !== '/dashboard/agent-cards') {
+        cardsUnread++;
+        updateBadge('cards-badge', cardsUnread);
+        var cs = (event.payload && event.payload.callsign) || 'unknown';
+        showToast('New agent card: ' + cs, 'info');
+      }
+
+      // Forward to page-specific handler
       if (typeof onValorEvent === 'function') {
         onValorEvent(event);
       }

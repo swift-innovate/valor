@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { overviewPage, missionsPage, approvalsPage, agentsPage, decisionsPage, agentCardsPage, commsPage } from "./pages/index.js";
+import { overviewPage, missionsPage, approvalsPage, agentsPage, decisionsPage, agentCardsPage, commsPage, artifactsPage } from "./pages/index.js";
 
 export const dashboardRoutes = new Hono();
 
@@ -11,3 +11,4 @@ dashboardRoutes.route("/agents", agentsPage);
 dashboardRoutes.route("/decisions", decisionsPage);
 dashboardRoutes.route("/agent-cards", agentCardsPage);
 dashboardRoutes.route("/comms", commsPage);
+dashboardRoutes.route("/artifacts", artifactsPage);

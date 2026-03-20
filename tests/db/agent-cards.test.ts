@@ -208,16 +208,34 @@ describe("Agent Card Repository", () => {
     expect(result).toBeNull();
   });
 
-  it("handles duplicate callsigns as separate cards", () => {
-    const card1 = submitCard(baseCard);
+  it("blocks duplicate callsign when first card is pending", () => {
+    submitCard(baseCard);
+    expect(() => submitCard(baseCard)).toThrow(/already has a pending card/);
+    expect(listCards({ callsign: "Gage" })).toHaveLength(1);
+  });
+
+  it("blocks duplicate callsign when first card is approved", () => {
+    const card = submitCard(baseCard);
+    approveCard(card.id, "director");
+    expect(() => submitCard(baseCard)).toThrow(/already registered and approved/);
+  });
+
+  it("allows resubmission after rejection", () => {
+    const card = submitCard(baseCard);
+    rejectCard(card.id, "Not ready");
+    // Rejected cards don't block new submissions
     const card2 = submitCard(baseCard);
-
-    expect(card1.id).not.toBe(card2.id);
+    expect(card2.approval_status).toBe("pending");
     expect(listCards({ callsign: "Gage" })).toHaveLength(2);
+  });
 
-    // getCardByCallsign returns the most recent
-    const latest = getCardByCallsign("Gage");
-    expect(latest!.id).toBe(card2.id);
+  it("allows resubmission after revocation", () => {
+    const card = submitCard(baseCard);
+    approveCard(card.id, "director");
+    revokeCard(card.id);
+    // Revoked cards don't block new submissions
+    const card2 = submitCard(baseCard);
+    expect(card2.approval_status).toBe("pending");
   });
 
   it("returns null for non-existent card", () => {

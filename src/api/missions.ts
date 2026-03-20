@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import {
   createMission,
   getMission,
@@ -17,6 +17,17 @@ import {
 import type { MissionStatus } from "../types/index.js";
 
 export const missionRoutes = new Hono();
+
+// Only the Director or system can create and dispatch missions.
+// Agents that need missions created must send an escalation message to the Director or their designated Chief of Staff agent.
+// This will be replaced with proper auth when the engine gets authentication.
+function requireDirector(c: Context): Response | null {
+  const role = c.req.header("X-VALOR-Role");
+  if (role !== "director" && role !== "system") {
+    return c.json({ error: "Only the Director can create missions" }, 403) as unknown as Response;
+  }
+  return null;
+}
 
 // List missions with optional filters
 missionRoutes.get("/", (c) => {
@@ -37,6 +48,9 @@ missionRoutes.get("/:id", (c) => {
 
 // Create mission
 missionRoutes.post("/", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const body = await c.req.json();
 
   const mission = createMission({
@@ -64,6 +78,9 @@ missionRoutes.post("/", async (c) => {
 
 // Create mission from SIGINT intercept
 missionRoutes.post("/from-sigint", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const body = await c.req.json();
 
   // Validate required fields
@@ -131,6 +148,9 @@ missionRoutes.post("/:id/queue", (c) => {
 
 // Dispatch a mission (evaluate gates + send to provider)
 missionRoutes.post("/:id/dispatch", (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   try {
     const result = dispatchMission(c.req.param("id"));
     const status = result.dispatched ? 200 : 202;
@@ -143,6 +163,9 @@ missionRoutes.post("/:id/dispatch", (c) => {
 
 // Approve a pending approval
 missionRoutes.post("/:id/approve", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const missionId = c.req.param("id");
   const body = await c.req.json().catch(() => ({}));
 
@@ -160,6 +183,9 @@ missionRoutes.post("/:id/approve", async (c) => {
 
 // Reject a pending approval
 missionRoutes.post("/:id/reject", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const missionId = c.req.param("id");
   const body = await c.req.json().catch(() => ({}));
 
@@ -188,6 +214,9 @@ missionRoutes.post("/:id/aar", async (c) => {
 
 // Abort a mission
 missionRoutes.post("/:id/abort", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const body = await c.req.json().catch(() => ({}));
   try {
     const mission = abortMission(c.req.param("id"), body.reason ?? "Aborted by Director");

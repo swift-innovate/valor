@@ -38,7 +38,7 @@ describe("POST /missions/from-sigint", () => {
 
     const res = await app.request("/missions/from-sigint", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
       body: JSON.stringify(payload),
     });
 
@@ -61,7 +61,7 @@ describe("POST /missions/from-sigint", () => {
   it("returns 400 if title is missing", async () => {
     const res = await app.request("/missions/from-sigint", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
       body: JSON.stringify({ objective: "test" }),
     });
     expect(res.status).toBe(400);
@@ -70,7 +70,7 @@ describe("POST /missions/from-sigint", () => {
   it("returns 400 if source is missing", async () => {
     const res = await app.request("/missions/from-sigint", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
       body: JSON.stringify({
         title: "Test",
         objective: "Test objective",
@@ -99,7 +99,7 @@ describe("POST /missions/from-sigint", () => {
 
     const res = await app.request("/missions/from-sigint", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
       body: JSON.stringify(payload),
     });
 

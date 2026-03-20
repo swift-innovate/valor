@@ -269,7 +269,7 @@ describe("Lead Instantiation", () => {
     const result = instantiateOperative({
       persona_id: persona.id,
       division_id: division.id,
-      runtime: "herd",
+      runtime: "ollama",
       model: "llama3",
     });
 

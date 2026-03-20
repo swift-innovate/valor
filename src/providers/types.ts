@@ -4,11 +4,12 @@ import type { StreamEvent } from "../types/index.js";
 // ─── Provider Classification ────────────────────────────
 
 export const ProviderType = z.enum([
-  "cloud_api",
-  "conduit",
-  "herd",
+  "claude_api",
+  "openai_api",
+  "ollama",
   "openclaw",
   "home_assistant",
+  "custom",
 ]);
 export type ProviderType = z.infer<typeof ProviderType>;
 
