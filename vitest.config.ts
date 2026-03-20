@@ -7,9 +7,7 @@ export default defineConfig({
     environment: "node",
     fileParallelism: false,
     exclude: ["**/node_modules/**", "**/.claude/**", "**/dist/**"],
-    env: {
-      VALOR_DB_PATH: "./data/valor-test.db",
-    },
+    setupFiles: ["./tests/helpers/setup.ts"],
   },
   resolve: {
     alias: {
