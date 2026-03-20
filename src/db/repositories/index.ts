@@ -101,3 +101,14 @@ export {
   createOathRule,
   listOathRules,
 } from "./decision-repo.js";
+
+export {
+  addMember,
+  removeMember,
+  getMember,
+  updateMemberRole,
+  getRoster,
+  getAgentDivisions,
+  getDivisionLead,
+  transferLead,
+} from "./division-member-repo.js";

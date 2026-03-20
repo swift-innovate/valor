@@ -6,6 +6,7 @@ export default defineConfig({
     globals: true,
     environment: "node",
     fileParallelism: false,
+    exclude: ["**/node_modules/**", "**/.claude/**", "**/dist/**"],
   },
   resolve: {
     alias: {

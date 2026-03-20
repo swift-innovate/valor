@@ -8,6 +8,7 @@ import {
   updateHeartbeat,
   deleteAgent,
   listMissions,
+  getAgentDivisions,
 } from "../db/index.js";
 import { AgentRuntime } from "../types/index.js";
 
@@ -140,4 +141,12 @@ agentRoutes.put("/:id/persona", async (c) => {
   });
   if (!agent) return c.json({ error: "Agent not found" }, 404);
   return c.json(agent);
+});
+
+// List divisions this agent belongs to
+agentRoutes.get("/:id/divisions", (c) => {
+  const id = c.req.param("id");
+  const agent = getAgent(id);
+  if (!agent) return c.json({ error: "Agent not found" }, 404);
+  return c.json(getAgentDivisions(id));
 });

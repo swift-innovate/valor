@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import {
   createDivision,
   getDivision,
@@ -6,9 +6,23 @@ import {
   updateDivision,
   deleteDivision,
   listAgents,
+  getRoster,
+  addMember,
+  removeMember,
+  updateMemberRole,
+  transferLead,
+  getDivisionLead,
 } from "../db/index.js";
 
 export const divisionRoutes = new Hono();
+
+function requireDirector(c: Context): Response | null {
+  const role = c.req.header("X-VALOR-Role");
+  if (role !== "director" && role !== "system") {
+    return c.json({ error: "Only the Director can perform this action" }, 403) as unknown as Response;
+  }
+  return null;
+}
 
 // List all divisions
 divisionRoutes.get("/", (c) => {
@@ -60,9 +74,20 @@ divisionRoutes.put("/:id", async (c) => {
 
 // Delete division
 divisionRoutes.delete("/:id", (c) => {
-  const deleted = deleteDivision(c.req.param("id"));
-  if (!deleted) return c.json({ error: "Division not found" }, 404);
-  return c.json({ ok: true });
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
+  try {
+    const deleted = deleteDivision(c.req.param("id"));
+    if (!deleted) return c.json({ error: "Division not found" }, 404);
+    return c.json({ ok: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Cannot delete division")) {
+      return c.json({ error: msg }, 409);
+    }
+    throw err;
+  }
 });
 
 // List agents belonging to this division
@@ -83,4 +108,110 @@ divisionRoutes.put("/:id/autonomy", async (c) => {
   });
   if (!division) return c.json({ error: "Division not found" }, 404);
   return c.json(division);
+});
+
+// Get division roster
+divisionRoutes.get("/:id/roster", (c) => {
+  const division = getDivision(c.req.param("id"));
+  if (!division) return c.json({ error: "Division not found" }, 404);
+  return c.json(getRoster(c.req.param("id")));
+});
+
+// Add member to division
+divisionRoutes.post("/:id/members", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
+  const body = await c.req.json();
+  try {
+    const member = addMember({
+      division_id: c.req.param("id"),
+      agent_id: body.agent_id,
+      role: body.role ?? "member",
+      assigned_by: c.req.header("X-VALOR-Role") ?? "director",
+    });
+    return c.json(member, 201);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Division not found") || msg.includes("Agent not found")) {
+      return c.json({ error: msg }, 404);
+    }
+    if (msg.includes("already a member")) {
+      return c.json({ error: msg }, 409);
+    }
+    throw err;
+  }
+});
+
+// Remove member from division
+divisionRoutes.delete("/:id/members/:agentId", (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
+  try {
+    const removed = removeMember(c.req.param("id"), c.req.param("agentId"), "director");
+    if (!removed) return c.json({ error: "Membership not found" }, 404);
+    return c.json({ ok: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Cannot remove division lead")) {
+      return c.json({ error: msg }, 409);
+    }
+    throw err;
+  }
+});
+
+// Update member role
+divisionRoutes.put("/:id/members/:agentId/role", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
+  const body = await c.req.json();
+  try {
+    const member = updateMemberRole(
+      c.req.param("id"),
+      c.req.param("agentId"),
+      body.role,
+      c.req.header("X-VALOR-Role") ?? "director",
+    );
+    if (!member) return c.json({ error: "Membership not found" }, 404);
+    return c.json(member);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Cannot promote") || msg.includes("Cannot demote")) {
+      return c.json({ error: msg }, 400);
+    }
+    throw err;
+  }
+});
+
+// Transfer division lead
+divisionRoutes.post("/:id/lead", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
+  const body = await c.req.json();
+  try {
+    const lead = transferLead(
+      c.req.param("id"),
+      body.agent_id,
+      c.req.header("X-VALOR-Role") ?? "director",
+    );
+    return c.json(lead);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Division not found") || msg.includes("Agent not found")) {
+      return c.json({ error: msg }, 404);
+    }
+    throw err;
+  }
+});
+
+// Get division lead
+divisionRoutes.get("/:id/lead", (c) => {
+  const division = getDivision(c.req.param("id"));
+  if (!division) return c.json({ error: "Division not found" }, 404);
+  const lead = getDivisionLead(c.req.param("id"));
+  if (!lead) return c.json({ error: "No lead assigned" }, 404);
+  return c.json(lead);
 });

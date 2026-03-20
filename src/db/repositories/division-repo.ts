@@ -77,6 +77,22 @@ export function updateDivision(
 }
 
 export function deleteDivision(id: string): boolean {
+  const memberCount = getDb().queryOne<{ cnt: number }>(
+    "SELECT COUNT(*) as cnt FROM division_members WHERE division_id = @id",
+    { id },
+  );
+  if ((memberCount?.cnt ?? 0) > 0) {
+    throw new Error("Cannot delete division with active members. Remove all members first.");
+  }
+
+  const activeMissionCount = getDb().queryOne<{ cnt: number }>(
+    "SELECT COUNT(*) as cnt FROM missions WHERE division_id = @id AND status NOT IN ('completed', 'cancelled', 'failed')",
+    { id },
+  );
+  if ((activeMissionCount?.cnt ?? 0) > 0) {
+    throw new Error("Cannot delete division with active missions.");
+  }
+
   const result = getDb().execute("DELETE FROM divisions WHERE id = @id", { id });
   return result.changes > 0;
 }

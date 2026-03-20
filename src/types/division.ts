@@ -25,3 +25,30 @@ export const DivisionSchema = z.object({
   updated_at: z.string(),
 });
 export type Division = z.infer<typeof DivisionSchema>;
+
+export const DivisionRole = z.enum(["lead", "member", "operative"]);
+export type DivisionRole = z.infer<typeof DivisionRole>;
+
+export const DivisionMemberSchema = z.object({
+  id: z.string(),
+  division_id: z.string(),
+  agent_id: z.string(),
+  role: DivisionRole,
+  assigned_at: z.string(),
+  assigned_by: z.string(),
+});
+export type DivisionMember = z.infer<typeof DivisionMemberSchema>;
+
+export const DivisionRosterEntrySchema = DivisionMemberSchema.extend({
+  callsign: z.string(),
+  health_status: z.string(),
+});
+export type DivisionRosterEntry = z.infer<typeof DivisionRosterEntrySchema>;
+
+export const AgentDivisionEntrySchema = z.object({
+  division_id: z.string(),
+  division_name: z.string(),
+  namespace: z.string(),
+  role: DivisionRole,
+});
+export type AgentDivisionEntry = z.infer<typeof AgentDivisionEntrySchema>;
