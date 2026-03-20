@@ -307,7 +307,7 @@ missionsPage.get("/", (c) => {
       }
 
       function lines(id) {
-        return document.getElementById(id).value.split('\n').map(s => s.trim()).filter(Boolean);
+        return document.getElementById(id).value.split('\\n').map(s => s.trim()).filter(Boolean);
       }
 
       async function createMission() {
