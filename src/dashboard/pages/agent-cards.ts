@@ -3,6 +3,7 @@ import { html } from "hono/html";
 import { layout } from "../layout.js";
 import { listCards } from "../../db/repositories/agent-card-repo.js";
 import type { AgentCard } from "../../types/index.js";
+import { getAuthUser } from "../../auth/index.js";
 
 export const agentCardsPage = new Hono();
 
@@ -164,5 +165,5 @@ agentCardsPage.get("/", (c) => {
       </div>
     </div>`;
 
-  return c.html(layout("Agent Cards", "/dashboard/agent-cards", content));
+  return c.html(layout("Agent Cards", "/dashboard/agent-cards", content, getAuthUser(c)));
 });

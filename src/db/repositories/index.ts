@@ -112,3 +112,24 @@ export {
   getDivisionLead,
   transferLead,
 } from "./division-member-repo.js";
+
+export {
+  createUser,
+  getUser,
+  getUserByUsername,
+  listUsers,
+  updateUserRole,
+  updateUserPassword,
+  deleteUser,
+  userCount,
+  seedDefaultUser,
+  type User,
+} from "./user-repo.js";
+
+export {
+  createSession,
+  getSession,
+  deleteSession,
+  deleteUserSessions,
+  cleanExpiredSessions,
+} from "./session-repo.js";

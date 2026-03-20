@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { html, raw } from "hono/html";
 import { layout } from "../layout.js";
 import { listConversations, getConversation } from "../../db/repositories/comms-repo.js";
+import { getAuthUser } from "../../auth/index.js";
 import { getArtifact } from "../../db/repositories/artifact-repo.js";
 import { listAgents } from "../../db/repositories/agent-repo.js";
 import type { CommsConversation, Artifact } from "../../types/index.js";
@@ -283,5 +284,5 @@ commsPage.get("/", (c) => {
       }
     </script>`;
 
-  return c.html(layout("Comms", "/dashboard/comms", content));
+  return c.html(layout("Comms", "/dashboard/comms", content, getAuthUser(c)));
 });

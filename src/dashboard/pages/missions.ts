@@ -3,6 +3,7 @@ import { html, raw } from "hono/html";
 import { layout } from "../layout.js";
 import { listMissions, listAgents, listDivisions, getAgent, getDivision } from "../../db/index.js";
 import type { Mission, MissionStatus } from "../../types/index.js";
+import { getAuthUser } from "../../auth/index.js";
 
 export const missionsPage = new Hono();
 
@@ -387,5 +388,5 @@ missionsPage.get("/", (c) => {
       }
     </script>`;
 
-  return c.html(layout("Missions", "/dashboard/missions", content));
+  return c.html(layout("Missions", "/dashboard/missions", content, getAuthUser(c)));
 });

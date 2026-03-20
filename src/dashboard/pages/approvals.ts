@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { html } from "hono/html";
 import { layout } from "../layout.js";
 import { listApprovals, getMission, type Approval } from "../../db/index.js";
+import { getAuthUser } from "../../auth/index.js";
 
 export const approvalsPage = new Hono();
 
@@ -153,5 +154,5 @@ approvalsPage.get("/", (c) => {
       </div>
     </div>`;
 
-  return c.html(layout("Approvals", "/dashboard/approvals", content));
+  return c.html(layout("Approvals", "/dashboard/approvals", content, getAuthUser(c)));
 });

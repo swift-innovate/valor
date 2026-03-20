@@ -3,6 +3,7 @@ import { html } from "hono/html";
 import { layout } from "../layout.js";
 import { listDivisions, getDivision, getRoster, listAgents } from "../../db/index.js";
 import type { Division } from "../../types/index.js";
+import { getAuthUser } from "../../auth/index.js";
 
 export const divisionsPage = new Hono();
 
@@ -230,5 +231,5 @@ divisionsPage.get("/", (c) => {
       }
     </script>`;
 
-  return c.html(layout("Divisions", "/dashboard/divisions", content));
+  return c.html(layout("Divisions", "/dashboard/divisions", content, getAuthUser(c)));
 });

@@ -3,6 +3,7 @@ import { html } from "hono/html";
 import { layout } from "../layout.js";
 import { listDecisions, getAnalysisForDecision } from "../../db/index.js";
 import type { Decision, VectorAnalysis, BiasRisk } from "../../types/index.js";
+import { getAuthUser } from "../../auth/index.js";
 
 export const decisionsPage = new Hono();
 
@@ -152,5 +153,5 @@ decisionsPage.get("/", (c) => {
       }
     </div>`;
 
-  return c.html(layout("Decisions", "/dashboard/decisions", content));
+  return c.html(layout("Decisions", "/dashboard/decisions", content, getAuthUser(c)));
 });

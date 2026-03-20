@@ -1,9 +1,10 @@
 import { html, raw } from "hono/html";
 import type { HtmlEscapedString } from "hono/utils/html";
+import type { User } from "../db/repositories/user-repo.js";
 
 type HtmlContent = HtmlEscapedString | Promise<HtmlEscapedString>;
 
-const NAV_ITEMS = [
+const NAV_ITEMS: Array<{ href: string; label: string; icon: string; directorOnly?: boolean }> = [
   { href: "/dashboard", label: "Overview", icon: "grid" },
   { href: "/dashboard/missions", label: "Missions", icon: "target" },
   { href: "/dashboard/approvals", label: "Approvals", icon: "check-circle" },
@@ -13,9 +14,10 @@ const NAV_ITEMS = [
   { href: "/dashboard/agent-cards", label: "Agent Cards", icon: "id-badge" },
   { href: "/dashboard/comms", label: "Comms", icon: "message-square" },
   { href: "/dashboard/artifacts", label: "Artifacts", icon: "file-code" },
+  { href: "/dashboard/users", label: "Users", icon: "user-cog", directorOnly: true },
 ];
 
-export function layout(title: string, activePath: string, content: HtmlContent): HtmlContent {
+export function layout(title: string, activePath: string, content: HtmlContent, user?: User | null): HtmlContent {
   return html`<!DOCTYPE html>
 <html lang="en" class="h-full bg-gray-950">
 <head>
@@ -57,6 +59,7 @@ export function layout(title: string, activePath: string, content: HtmlContent):
               ${NAV_ITEMS.map(
                 (item) => html`
                 <a href="${item.href}"
+                   style="${item.directorOnly && user?.role !== 'director' ? 'display:none' : ''}"
                    id="nav-${item.label.toLowerCase().replace(/\s+/g, '-')}"
                    class="relative px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                      activePath === item.href
@@ -73,6 +76,18 @@ export function layout(title: string, activePath: string, content: HtmlContent):
           <div class="flex items-center gap-3">
             <span id="ws-status" class="text-xs text-gray-500">Connecting...</span>
             <span id="client-count" class="text-xs text-gray-600"></span>
+            ${user ? html`
+            <div class="flex items-center gap-2 border-l border-gray-700 pl-3">
+              ${user.role === "director" ? html`<a href="/dashboard/users" class="text-xs text-gray-400 hover:text-white transition-colors">${user.username}</a>` : html`<span class="text-xs text-gray-400">${user.username}</span>`}
+              <span class="text-xs px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                user.role === "director" ? "bg-valor-900 text-valor-400" :
+                user.role === "operator" ? "bg-indigo-900 text-indigo-400" :
+                "bg-gray-800 text-gray-500"
+              }">${user.role}</span>
+              <form method="POST" action="/auth/logout" class="inline">
+                <button type="submit" class="text-xs text-gray-500 hover:text-red-400 transition-colors">Sign out</button>
+              </form>
+            </div>` : ""}
           </div>
         </div>
       </div>
@@ -89,6 +104,7 @@ export function layout(title: string, activePath: string, content: HtmlContent):
 
   <!-- WebSocket client -->
   <script>
+    var VALOR_ROLE = ${raw(JSON.stringify(user?.role ?? null))};
     const WS_URL = 'ws://' + window.location.host + '/ws';
     let ws;
     let reconnectTimer;

@@ -4,6 +4,7 @@ import { layout } from "../layout.js";
 import { listArtifacts, getArtifact } from "../../db/repositories/artifact-repo.js";
 import { listAgents } from "../../db/repositories/agent-repo.js";
 import type { Artifact } from "../../types/index.js";
+import { getAuthUser } from "../../auth/index.js";
 
 export const artifactsPage = new Hono();
 
@@ -190,5 +191,5 @@ artifactsPage.get("/", (c) => {
       }
     </script>`;
 
-  return c.html(layout("Artifacts", "/dashboard/artifacts", content));
+  return c.html(layout("Artifacts", "/dashboard/artifacts", content, getAuthUser(c)));
 });

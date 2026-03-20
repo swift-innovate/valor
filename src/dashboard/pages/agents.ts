@@ -3,6 +3,7 @@ import { html } from "hono/html";
 import { layout } from "../layout.js";
 import { listAgents, getDivision, getPersona } from "../../db/index.js";
 import type { Agent, AgentStatus } from "../../types/index.js";
+import { getAuthUser } from "../../auth/index.js";
 
 export const agentsPage = new Hono();
 
@@ -165,5 +166,5 @@ agentsPage.get("/", (c) => {
           </div>`}
     </div>`;
 
-  return c.html(layout("Agents", "/dashboard/agents", content));
+  return c.html(layout("Agents", "/dashboard/agents", content, getAuthUser(c)));
 });

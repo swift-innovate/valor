@@ -7,3 +7,5 @@ export { sitrepRoutes } from "./sitreps.js";
 export { agentCardRoutes } from "./agent-cards.js";
 export { commsRoutes } from "./comms.js";
 export { artifactRoutes } from "./artifacts.js";
+export { authRoutes } from "./auth.js";
+export { userRoutes } from "./users.js";

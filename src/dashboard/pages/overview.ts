@@ -3,6 +3,7 @@ import { html } from "hono/html";
 import { layout } from "../layout.js";
 import { listDivisions, listAgents, listMissions } from "../../db/index.js";
 import type { Division, Agent, Mission } from "../../types/index.js";
+import { getAuthUser } from "../../auth/index.js";
 
 export const overviewPage = new Hono();
 
@@ -122,5 +123,5 @@ overviewPage.get("/", (c) => {
       </div>
     </div>`;
 
-  return c.html(layout("Overview", "/dashboard", content));
+  return c.html(layout("Overview", "/dashboard", content, getAuthUser(c)));
 });

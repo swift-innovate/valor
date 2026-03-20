@@ -13,15 +13,21 @@ import {
   createOllamaAdapter,
 } from "./providers/index.js";
 import { getActiveSessions, stopHealthMonitor, startHealthMonitor } from "./stream/index.js";
-import { missionRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes, sitrepRoutes, agentCardRoutes, commsRoutes, artifactRoutes } from "./api/index.js";
+import { missionRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes, sitrepRoutes, agentCardRoutes, commsRoutes, artifactRoutes, authRoutes, userRoutes } from "./api/index.js";
 import { dashboardRoutes } from "./dashboard/index.js";
+import { loginPage } from "./dashboard/pages/index.js";
+import { sessionMiddleware, requireAuth } from "./auth/index.js";
 import { attachWebSocket, closeWebSocket } from "./ws/index.js";
 import { initOrchestratorListeners } from "./orchestrator/index.js";
 import { seedDefaultOathRules } from "./vector/index.js";
+import { seedDefaultUser } from "./db/repositories/index.js";
 import { registerSigintOutcomeCallback } from "./callbacks/sigint-outcome.js";
 
 const app = new Hono();
 const startTime = Date.now();
+
+// Session resolution — runs on every request
+app.use("*", sessionMiddleware);
 
 // Root redirect to dashboard
 app.get("/", (c) => c.redirect("/dashboard"));
@@ -45,7 +51,12 @@ app.get("/health", async (c) => {
   });
 });
 
+// Auth routes (no auth required)
+app.route("/auth", authRoutes);
+app.route("/login", loginPage);
+
 // API routes
+app.route("/api/users", userRoutes);
 app.route("/missions", missionRoutes);
 app.route("/divisions", divisionRoutes);
 app.route("/agents", agentRoutes);
@@ -56,7 +67,8 @@ app.route("/agent-cards", agentCardRoutes);
 app.route("/comms", commsRoutes);
 app.route("/artifacts", artifactRoutes);
 
-// Dashboard
+// Dashboard — protected
+app.use("/dashboard/*", requireAuth);
 app.route("/dashboard", dashboardRoutes);
 
 // Agent skill document — served as raw markdown for agent onboarding
@@ -105,8 +117,9 @@ if (config.ollamaBaseUrl) {
   );
 }
 
-// Seed default oath rules
+// Seed defaults
 seedDefaultOathRules();
+seedDefaultUser();
 
 // Initialize orchestrator event listeners
 initOrchestratorListeners();
