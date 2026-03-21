@@ -35,6 +35,13 @@ import type {
   SystemEvent,
 } from "../../src/nats/index.js";
 import type { NatsConnection, Subscription } from "@nats-io/nats-core";
+import {
+  handleLogs,
+  handleHealth,
+  handleOllama,
+  handleRetry,
+  setLastMission,
+} from "./diagnostics.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -130,6 +137,7 @@ async function main(): Promise<void> {
     };
 
     nc.publish("valor.missions.inbound", encode(envelope));
+    setLastMission("valor.missions.inbound", encode(envelope));
     await bot.sendMessage(
       msg.chat.id,
       `\u2705 Mission received. Director is classifying...\n\n_"${missionText.slice(0, 100)}"_`,
@@ -171,12 +179,46 @@ async function main(): Promise<void> {
         "",
         "`/mission <text>` \u2014 Dispatch a mission to the Director",
         "`/status` \u2014 Fleet status",
+        "`/health` \u2014 Deep health check (NATS, Ollama, Director)",
+        "`/logs [target]` \u2014 Tail log files (director, nats, analyst...)",
+        "`/ollama [unload|load <model>]` \u2014 Manage Ollama models",
+        "`/retry` \u2014 Re-dispatch last stuck/failed mission",
         "`/help` \u2014 This message",
         "",
         "Sitreps and review verdicts are delivered automatically.",
       ].join("\n"),
       { parse_mode: "Markdown" },
     );
+  });
+
+  // /logs [target] — tail log files
+  bot.onText(/^\/logs(?:\s+(\w+))?$/, async (msg, match) => {
+    if (!isPrincipal(msg)) return;
+    principalChatId = msg.chat.id;
+    const target = match?.[1] ?? "director";
+    await handleLogs(bot, msg.chat.id, target);
+  });
+
+  // /health — deep health check
+  bot.onText(/^\/health$/, async (msg) => {
+    if (!isPrincipal(msg)) return;
+    principalChatId = msg.chat.id;
+    await handleHealth(bot, msg.chat.id, nc);
+  });
+
+  // /ollama [subcommand] — model management
+  bot.onText(/^\/ollama(?:\s+(.+))?$/, async (msg, match) => {
+    if (!isPrincipal(msg)) return;
+    principalChatId = msg.chat.id;
+    const subcommand = match?.[1] ?? "list";
+    await handleOllama(bot, msg.chat.id, subcommand);
+  });
+
+  // /retry — re-publish last failed/stuck mission
+  bot.onText(/^\/retry$/, async (msg) => {
+    if (!isPrincipal(msg)) return;
+    principalChatId = msg.chat.id;
+    await handleRetry(bot, msg.chat.id, nc);
   });
 
   // /start — initial greeting
