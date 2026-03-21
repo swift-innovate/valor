@@ -1,14 +1,15 @@
 /**
  * NATS Subscriber for Mission Control Dashboard
- * 
+ *
  * Connects to NATS and subscribes to all relevant subjects,
  * feeding messages into the dashboard state manager.
- * 
+ *
  * Mission: VM-016
  * Operative: Mira
  */
 
-import { connect, type NatsConnection, StringCodec } from "nats";
+import { getNatsConnection, closeNatsConnection } from "../nats/index.js";
+import type { NatsConnection, Subscription, Msg } from "@nats-io/nats-core";
 import type {
   VALORMessage,
   MissionBrief,
@@ -20,7 +21,9 @@ import type {
 } from "../types/nats.js";
 import { natsState } from "./nats-state.js";
 
-const sc = StringCodec();
+function decode<T>(msg: Msg): VALORMessage<T> {
+  return JSON.parse(new TextDecoder().decode(msg.data)) as VALORMessage<T>;
+}
 
 /**
  * NATS subscription manager for dashboard
@@ -28,6 +31,7 @@ const sc = StringCodec();
 export class NATSSubscriber {
   private nc: NatsConnection | null = null;
   private connected: boolean = false;
+  private subs: Subscription[] = [];
 
   /**
    * Connect to NATS and start subscriptions
@@ -40,19 +44,20 @@ export class NATSSubscriber {
 
     try {
       console.log(`[NATSSubscriber] Connecting to ${natsUrl}...`);
-      this.nc = await connect({ servers: natsUrl });
+      this.nc = await getNatsConnection({
+        servers: [natsUrl],
+        name: "dashboard-subscriber",
+      });
       this.connected = true;
       console.log("[NATSSubscriber] Connected to NATS");
 
       // Start all subscriptions
-      await Promise.all([
-        this.subscribeMissions(),
-        this.subscribeSitreps(),
-        this.subscribeHeartbeats(),
-        this.subscribeSystemEvents(),
-        this.subscribeReviewVerdicts(),
-        this.subscribeComms(),
-      ]);
+      this.subscribeMissions();
+      this.subscribeSitreps();
+      this.subscribeHeartbeats();
+      this.subscribeSystemEvents();
+      this.subscribeReviewVerdicts();
+      this.subscribeComms();
 
       console.log("[NATSSubscriber] All subscriptions active");
     } catch (err) {
@@ -65,123 +70,134 @@ export class NATSSubscriber {
   /**
    * Subscribe to valor.missions.*.pending (mission briefs)
    */
-  private async subscribeMissions(): Promise<void> {
+  private subscribeMissions(): void {
     if (!this.nc) return;
 
-    const sub = this.nc.subscribe("valor.missions.*.pending");
+    const sub = this.nc.subscribe("valor.missions.*.pending", {
+      callback: (_err, msg) => {
+        if (_err) return;
+        try {
+          natsState.handleMissionBrief(decode<MissionBrief>(msg));
+        } catch (err) {
+          console.error("[NATSSubscriber] Error processing mission brief:", err);
+        }
+      },
+    });
+    this.subs.push(sub);
     console.log("[NATSSubscriber] Subscribed to valor.missions.*.pending");
-
-    for await (const m of sub) {
-      try {
-        const msg = JSON.parse(sc.decode(m.data)) as VALORMessage<MissionBrief>;
-        natsState.handleMissionBrief(msg);
-      } catch (err) {
-        console.error("[NATSSubscriber] Error processing mission brief:", err);
-      }
-    }
   }
 
   /**
    * Subscribe to valor.sitreps.> (all sitreps)
    */
-  private async subscribeSitreps(): Promise<void> {
+  private subscribeSitreps(): void {
     if (!this.nc) return;
 
-    const sub = this.nc.subscribe("valor.sitreps.>");
+    const sub = this.nc.subscribe("valor.sitreps.>", {
+      callback: (_err, msg) => {
+        if (_err) return;
+        try {
+          natsState.handleSitrep(decode<Sitrep>(msg));
+        } catch (err) {
+          console.error("[NATSSubscriber] Error processing sitrep:", err);
+        }
+      },
+    });
+    this.subs.push(sub);
     console.log("[NATSSubscriber] Subscribed to valor.sitreps.>");
-
-    for await (const m of sub) {
-      try {
-        const msg = JSON.parse(sc.decode(m.data)) as VALORMessage<Sitrep>;
-        natsState.handleSitrep(msg);
-      } catch (err) {
-        console.error("[NATSSubscriber] Error processing sitrep:", err);
-      }
-    }
   }
 
   /**
    * Subscribe to valor.system.heartbeat.* (all heartbeats)
    */
-  private async subscribeHeartbeats(): Promise<void> {
+  private subscribeHeartbeats(): void {
     if (!this.nc) return;
 
-    const sub = this.nc.subscribe("valor.system.heartbeat.*");
+    const sub = this.nc.subscribe("valor.system.heartbeat.*", {
+      callback: (_err, msg) => {
+        if (_err) return;
+        try {
+          natsState.handleHeartbeat(decode<Heartbeat>(msg));
+        } catch (err) {
+          console.error("[NATSSubscriber] Error processing heartbeat:", err);
+        }
+      },
+    });
+    this.subs.push(sub);
     console.log("[NATSSubscriber] Subscribed to valor.system.heartbeat.*");
-
-    for await (const m of sub) {
-      try {
-        const msg = JSON.parse(sc.decode(m.data)) as VALORMessage<Heartbeat>;
-        natsState.handleHeartbeat(msg);
-      } catch (err) {
-        console.error("[NATSSubscriber] Error processing heartbeat:", err);
-      }
-    }
   }
 
   /**
    * Subscribe to valor.system.events (system lifecycle events)
    */
-  private async subscribeSystemEvents(): Promise<void> {
+  private subscribeSystemEvents(): void {
     if (!this.nc) return;
 
-    const sub = this.nc.subscribe("valor.system.events");
+    const sub = this.nc.subscribe("valor.system.events", {
+      callback: (_err, msg) => {
+        if (_err) return;
+        try {
+          natsState.handleSystemEvent(decode<SystemEvent>(msg));
+        } catch (err) {
+          console.error("[NATSSubscriber] Error processing system event:", err);
+        }
+      },
+    });
+    this.subs.push(sub);
     console.log("[NATSSubscriber] Subscribed to valor.system.events");
-
-    for await (const m of sub) {
-      try {
-        const msg = JSON.parse(sc.decode(m.data)) as VALORMessage<SystemEvent>;
-        natsState.handleSystemEvent(msg);
-      } catch (err) {
-        console.error("[NATSSubscriber] Error processing system event:", err);
-      }
-    }
   }
 
   /**
    * Subscribe to valor.review.verdict.* (review verdicts)
    */
-  private async subscribeReviewVerdicts(): Promise<void> {
+  private subscribeReviewVerdicts(): void {
     if (!this.nc) return;
 
-    const sub = this.nc.subscribe("valor.review.verdict.*");
+    const sub = this.nc.subscribe("valor.review.verdict.*", {
+      callback: (_err, msg) => {
+        if (_err) return;
+        try {
+          natsState.handleVerdict(decode<ReviewVerdict>(msg));
+        } catch (err) {
+          console.error("[NATSSubscriber] Error processing verdict:", err);
+        }
+      },
+    });
+    this.subs.push(sub);
     console.log("[NATSSubscriber] Subscribed to valor.review.verdict.*");
-
-    for await (const m of sub) {
-      try {
-        const msg = JSON.parse(sc.decode(m.data)) as VALORMessage<ReviewVerdict>;
-        natsState.handleVerdict(msg);
-      } catch (err) {
-        console.error("[NATSSubscriber] Error processing verdict:", err);
-      }
-    }
   }
 
   /**
    * Subscribe to valor.comms.> (all comms)
    */
-  private async subscribeComms(): Promise<void> {
+  private subscribeComms(): void {
     if (!this.nc) return;
 
-    const sub = this.nc.subscribe("valor.comms.>");
+    const sub = this.nc.subscribe("valor.comms.>", {
+      callback: (_err, msg) => {
+        if (_err) return;
+        try {
+          natsState.handleCommsMessage(decode<CommsMessage>(msg));
+        } catch (err) {
+          console.error("[NATSSubscriber] Error processing comms message:", err);
+        }
+      },
+    });
+    this.subs.push(sub);
     console.log("[NATSSubscriber] Subscribed to valor.comms.>");
-
-    for await (const m of sub) {
-      try {
-        const msg = JSON.parse(sc.decode(m.data)) as VALORMessage<CommsMessage>;
-        natsState.handleCommsMessage(msg);
-      } catch (err) {
-        console.error("[NATSSubscriber] Error processing comms message:", err);
-      }
-    }
   }
 
   /**
    * Stop all subscriptions and disconnect
    */
   async stop(): Promise<void> {
+    for (const sub of this.subs) {
+      sub.unsubscribe();
+    }
+    this.subs = [];
+
     if (this.nc) {
-      await this.nc.drain();
+      await closeNatsConnection();
       this.nc = null;
       this.connected = false;
       console.log("[NATSSubscriber] Disconnected from NATS");
