@@ -52,7 +52,7 @@ describe("Artifact API", () => {
     it("creates a code artifact", async () => {
       const res = await app.request("/artifacts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
         body: JSON.stringify(baseArtifact),
       });
 
@@ -68,7 +68,7 @@ describe("Artifact API", () => {
     it("creates a markdown artifact", async () => {
       const res = await app.request("/artifacts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
         body: JSON.stringify({
           title: "README.md",
           content_type: "markdown",
@@ -86,7 +86,7 @@ describe("Artifact API", () => {
     it("creates a config artifact", async () => {
       const res = await app.request("/artifacts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
         body: JSON.stringify({
           title: "docker-compose.yml",
           content_type: "config",
@@ -104,7 +104,7 @@ describe("Artifact API", () => {
     it("returns 400 for invalid content_type", async () => {
       const res = await app.request("/artifacts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
         body: JSON.stringify({ ...baseArtifact, content_type: "binary" }),
       });
 
@@ -116,7 +116,7 @@ describe("Artifact API", () => {
     it("returns 400 if required fields missing", async () => {
       const res = await app.request("/artifacts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
         body: JSON.stringify({ title: "test.ts" }), // missing content_type, content, created_by
       });
       expect(res.status).toBe(400);
@@ -128,7 +128,7 @@ describe("Artifact API", () => {
 
       await app.request("/artifacts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
         body: JSON.stringify(baseArtifact),
       });
 
@@ -163,7 +163,7 @@ describe("Artifact API", () => {
 
       const res = await app.request(`/artifacts/${artifact.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
         body: JSON.stringify({ content: "export function hello() { return 'updated'; }\n" }),
       });
 
@@ -178,7 +178,7 @@ describe("Artifact API", () => {
 
       const res = await app.request(`/artifacts/${artifact.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
         body: JSON.stringify({ title: "renamed.ts", summary: "New summary" }),
       });
 
@@ -197,7 +197,7 @@ describe("Artifact API", () => {
 
       await app.request(`/artifacts/${artifact.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
         body: JSON.stringify({ title: "changed.ts" }),
       });
 
@@ -208,7 +208,7 @@ describe("Artifact API", () => {
     it("returns 404 for unknown artifact", async () => {
       const res = await app.request("/artifacts/art_nonexistent", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
         body: JSON.stringify({ title: "test" }),
       });
       expect(res.status).toBe(404);

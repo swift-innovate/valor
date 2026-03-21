@@ -9,6 +9,7 @@ import {
   revokeCard,
 } from "../db/repositories/agent-card-repo.js";
 import { AgentRuntime } from "../types/index.js";
+import { requireDirector } from "../auth/index.js";
 
 export const agentCardRoutes = new Hono();
 
@@ -78,6 +79,9 @@ agentCardRoutes.put("/:id", async (c) => {
 
 // Approve a card
 agentCardRoutes.post("/:id/approve", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const body = await c.req.json();
   const approvedBy = body.approved_by ?? "director";
 
@@ -92,6 +96,9 @@ agentCardRoutes.post("/:id/approve", async (c) => {
 
 // Reject a card
 agentCardRoutes.post("/:id/reject", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const body = await c.req.json();
   if (!body.reason) {
     return c.json({ error: "reason is required" }, 400);
@@ -108,6 +115,9 @@ agentCardRoutes.post("/:id/reject", async (c) => {
 
 // Revoke a previously approved card
 agentCardRoutes.post("/:id/revoke", (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const card = revokeCard(c.req.param("id"));
   if (!card) {
     const existing = getCard(c.req.param("id"));

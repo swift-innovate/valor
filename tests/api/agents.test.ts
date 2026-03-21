@@ -38,7 +38,7 @@ describe("PUT /agents/:id", () => {
 
     const res = await app.request(`/agents/${agent.id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
       body: JSON.stringify({ model: "claude-sonnet-4-20250514" }),
     });
 
@@ -52,7 +52,7 @@ describe("PUT /agents/:id", () => {
 
     const res = await app.request(`/agents/${agent.id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
       body: JSON.stringify({ runtime: "invalid_runtime_xyz" }),
     });
 
@@ -68,7 +68,7 @@ describe("PUT /agents/:id", () => {
 
     const res = await app.request(`/agents/${agent.id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
       body: JSON.stringify({ capabilities: "not-an-array" }),
     });
 
@@ -81,7 +81,7 @@ describe("PUT /agents/:id", () => {
   it("returns 404 for non-existent agent", async () => {
     const res = await app.request("/agents/agt_nonexistent", {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
       body: JSON.stringify({ model: "test" }),
     });
 
@@ -93,7 +93,7 @@ describe("PUT /agents/:id", () => {
 
     const res = await app.request(`/agents/${agent.id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-VALOR-Role": "director" },
       body: JSON.stringify({ callsign: "NewName", id: "hacked_id", created_at: "malicious" }),
     });
 

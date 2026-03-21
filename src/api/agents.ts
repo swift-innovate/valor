@@ -11,6 +11,7 @@ import {
   getAgentDivisions,
 } from "../db/index.js";
 import { AgentRuntime } from "../types/index.js";
+import { requireDirector } from "../auth/index.js";
 
 const VALID_RUNTIMES: AgentRuntime[] = [
   "openclaw",
@@ -42,13 +43,8 @@ agentRoutes.get("/:id", (c) => {
 // LOCKED: Agents can only be created through the agent card approval flow.
 // Direct registration is restricted to system/director use only.
 agentRoutes.post("/", async (c) => {
-  const role = c.req.header("X-VALOR-Role");
-  if (role !== "director" && role !== "system") {
-    return c.json(
-      { error: "Direct agent registration is not allowed. Submit an agent card at POST /agent-cards instead." },
-      403,
-    );
-  }
+  const denied = requireDirector(c);
+  if (denied) return denied;
 
   const body = await c.req.json();
 
@@ -80,6 +76,9 @@ agentRoutes.post("/", async (c) => {
 
 // Update agent
 agentRoutes.put("/:id", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const body = await c.req.json();
 
   // Validate runtime if provided
@@ -111,6 +110,9 @@ agentRoutes.put("/:id", async (c) => {
 
 // Delete/deregister agent
 agentRoutes.delete("/:id", (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const deleted = deleteAgent(c.req.param("id"));
   if (!deleted) return c.json({ error: "Agent not found" }, 404);
   return c.json({ ok: true });

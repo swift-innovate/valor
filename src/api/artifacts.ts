@@ -36,6 +36,9 @@ artifactRoutes.get("/:id", (c) => {
 
 // Create artifact
 artifactRoutes.post("/", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   let body: Record<string, unknown>;
   try {
     body = await c.req.json();
@@ -71,6 +74,9 @@ artifactRoutes.post("/", async (c) => {
 
 // Update artifact (bumps version)
 artifactRoutes.put("/:id", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   let body: Record<string, unknown>;
   try {
     body = await c.req.json();

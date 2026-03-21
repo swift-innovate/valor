@@ -33,6 +33,9 @@ divisionRoutes.get("/:id", (c) => {
 
 // Create division
 divisionRoutes.post("/", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const body = await c.req.json();
 
   if (!body.name || !body.namespace) {
@@ -60,6 +63,9 @@ divisionRoutes.post("/", async (c) => {
 
 // Update division
 divisionRoutes.put("/:id", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const body = await c.req.json();
   const division = updateDivision(c.req.param("id"), body);
   if (!division) return c.json({ error: "Division not found" }, 404);
@@ -96,6 +102,9 @@ divisionRoutes.get("/:id/agents", (c) => {
 
 // Update autonomy policy for a division
 divisionRoutes.put("/:id/autonomy", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const body = await c.req.json();
   const division = updateDivision(c.req.param("id"), {
     autonomy_policy: body,

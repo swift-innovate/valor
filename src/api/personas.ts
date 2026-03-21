@@ -8,6 +8,7 @@ import {
   deletePersona,
 } from "../db/index.js";
 import { loadPersona, parsePersonaDefinition } from "../identity/index.js";
+import { requireDirector } from "../auth/index.js";
 
 export const personaRoutes = new Hono();
 
@@ -41,6 +42,9 @@ personaRoutes.get("/callsign/:callsign", (c) => {
 
 // Create persona directly
 personaRoutes.post("/", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const body = await c.req.json();
   try {
     const persona = createPersona({
@@ -65,6 +69,9 @@ personaRoutes.post("/", async (c) => {
 
 // Load persona from definition (upsert by callsign)
 personaRoutes.post("/load", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const body = await c.req.json();
   try {
     const definition = parsePersonaDefinition(body);
@@ -77,6 +84,9 @@ personaRoutes.post("/load", async (c) => {
 
 // Update persona
 personaRoutes.put("/:id", async (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const body = await c.req.json();
   const persona = updatePersona(c.req.param("id"), body);
   if (!persona) return c.json({ error: "Persona not found" }, 404);
@@ -85,6 +95,9 @@ personaRoutes.put("/:id", async (c) => {
 
 // Delete persona
 personaRoutes.delete("/:id", (c) => {
+  const denied = requireDirector(c);
+  if (denied) return denied;
+
   const deleted = deletePersona(c.req.param("id"));
   if (!deleted) return c.json({ error: "Persona not found" }, 404);
   return c.json({ deleted: true });
