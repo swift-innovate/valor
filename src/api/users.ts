@@ -7,6 +7,7 @@ import {
   updateUserRole,
   deleteUser,
   deleteUserSessions,
+  toSafeUser,
 } from "../db/repositories/index.js";
 
 export const userRoutes = new Hono();
@@ -15,7 +16,7 @@ export const userRoutes = new Hono();
 userRoutes.get("/", (c) => {
   const denied = requireDirector(c);
   if (denied) return denied;
-  return c.json(listUsers());
+  return c.json(listUsers().map(toSafeUser));
 });
 
 // POST /api/users — create user (director only)
@@ -35,7 +36,7 @@ userRoutes.post("/", async (c) => {
 
   try {
     const user = createUser({ username, password, role: role as "director" | "operator" | "observer" });
-    return c.json(user, 201);
+    return c.json(toSafeUser(user), 201);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("UNIQUE") || msg.includes("already exists")) {
@@ -59,7 +60,7 @@ userRoutes.put("/:id/role", async (c) => {
 
   const user = updateUserRole(c.req.param("id"), role as "director" | "operator" | "observer");
   if (!user) return c.json({ error: "User not found" }, 404);
-  return c.json(user);
+  return c.json(toSafeUser(user));
 });
 
 // DELETE /api/users/:id — remove user and all their sessions (director only)

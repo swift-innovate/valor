@@ -12,6 +12,13 @@ export interface User {
   updated_at: string;
 }
 
+export type SafeUser = Omit<User, "password_hash">;
+
+export function toSafeUser(user: User): SafeUser {
+  const { password_hash, ...safe } = user;
+  return safe;
+}
+
 function generateId(): string {
   return `usr_${nanoid(21)}`;
 }

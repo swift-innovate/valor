@@ -124,6 +124,8 @@ export {
   userCount,
   seedDefaultUser,
   type User,
+  type SafeUser,
+  toSafeUser,
 } from "./user-repo.js";
 
 export {
