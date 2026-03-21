@@ -1,7 +1,7 @@
 # VALOR Mission Board
 
-Last updated: 2026-03-21T17:15:00Z
-Updated by: VALOR/Gage
+Last updated: 2026-03-21T17:30:00Z
+Updated by: VALOR/Mira
 
 ---
 
@@ -79,6 +79,17 @@ Updated by: VALOR/Gage
 - **Status:** Review
 - **Updated:** 2026-03-21
 - **Deliverable:** `docs/safety-gates.md`
+
+### VM-014: Telegram Gateway NATS Bridge
+- **Assigned:** Mira
+- **Priority:** P1
+- **Branch:** mission/VM-014
+- **Depends on:** VM-001 (NATS schema), VM-002 (NATS client)
+- **Description:** Update Telegram gateway to communicate through NATS instead of direct HTTP to Director. Publish `/mission` to `valor.missions.inbound`, `/status` to `valor.system.status`, `/ask` and free text to `valor.comms.direct.principal.mira`. Subscribe to `valor.sitreps.>` and `valor.system.events` for updates.
+- **Acceptance:** Gateway bridges Telegram <-> NATS. No direct coupling to Director. Principal can dispatch missions and receive sitreps via Telegram.
+- **Status:** Review
+- **Updated:** 2026-03-21 17:30Z
+- **Notes:** COMPLETE. Gateway fully implemented at `gateways/telegram/`. New types at `src/types/nats.ts`. Schema updated with `valor.missions.inbound` subject. Ready for integration with live NATS (VM-008). Thin bridge pattern - no business logic. Principal-only security.
 
 ---
 
