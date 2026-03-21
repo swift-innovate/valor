@@ -91,10 +91,10 @@ export async function dispatchWebhook(
     timestamp: new Date().toISOString(),
   };
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
 
+  try {
     const response = await fetch(agent.endpoint_url, {
       method: "POST",
       headers: {
@@ -106,7 +106,6 @@ export async function dispatchWebhook(
       signal: controller.signal,
     });
 
-    clearTimeout(timeout);
     const duration_ms = Date.now() - start;
     const delivered = response.ok;
 
@@ -192,6 +191,8 @@ export async function dispatchWebhook(
       error,
       duration_ms,
     };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -216,10 +217,10 @@ export async function dispatchAbortWebhook(
     };
   }
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
 
+  try {
     const response = await fetch(agent.endpoint_url, {
       method: "POST",
       headers: {
@@ -235,8 +236,6 @@ export async function dispatchAbortWebhook(
       }),
       signal: controller.signal,
     });
-
-    clearTimeout(timeout);
 
     return {
       delivered: response.ok,
@@ -255,5 +254,7 @@ export async function dispatchAbortWebhook(
       error: err instanceof Error ? err.message : String(err),
       duration_ms: Date.now() - start,
     };
+  } finally {
+    clearTimeout(timeout);
   }
 }
