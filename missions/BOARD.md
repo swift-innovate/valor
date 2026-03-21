@@ -1,6 +1,6 @@
 # VALOR Mission Board
 
-Last updated: 2026-03-21T15:15:00Z  
+Last updated: 2026-03-21T15:20:00Z  
 Updated by: VALOR/Mira
 
 ---
@@ -55,30 +55,24 @@ Updated by: VALOR/Mira
 
 <!-- Completed work awaiting review/merge -->
 
-### VM-004: Operative Manifest and Roster
-- **Assigned:** Mira
-- **Priority:** P2
-- **Branch:** mission/VM-004
-- **Depends on:** None
-- **Description:** Create `agents/ROSTER.md` with a structured capability manifest for each operative. Include: name, callsign, division, capabilities (tagged list), preferred model tier, tool access level, escalation rules, domain keywords for routing. This manifest feeds the Director's system prompt.
-- **Acceptance:** All 8 operatives documented. Format is human-readable AND parseable (YAML frontmatter per operative section). Tom approves accuracy.
-- **Status:** Review
-- **Updated:** 2026-03-21 15:45Z
-- **Notes:** Complete. All 8 operatives documented with YAML frontmatter format. Safety-critical escalation patterns included for Director hard-coding. Branch pushed to origin.
-
-### VM-005: Director Benchmark Analysis
-- **Assigned:** Mira
-- **Priority:** P1
-- **Branch:** mission/VM-005
-- **Depends on:** Benchmark results from CITADEL (COMPLETE - all 7 models)
-- **Description:** Analyze benchmark scorecard results. Write `docs/director-model-selection.md` with: score comparison table, latency analysis, category-by-category breakdown, Gear 1 vs Gear 2 recommendation, failure mode notes per model.
-- **Acceptance:** Clear model recommendation backed by data. Tom approves selection.
-- **Status:** Review
-- **Updated:** 2026-03-21 15:15Z
-- **Notes:** COMPLETE. All 7 models benchmarked and analyzed. **Final recommendation: Gemma3:27B (single-gear architecture)**. Second-highest score (80.6%), best decomposition among reliable models (25/30), fastest large model (7.5s). Eliminates gear-switching complexity. Alternative provided: Qwen3:8B (Gear 1) + Nemotron (Gear 2). Critical finding: 6 of 7 models failed financial transaction safety - hard-coded gates REQUIRED. Only qwen3.5:27b passed financial trap but has unreliable JSON. Document includes complete analysis, failure modes, safety gate implementation examples.
-
 ---
 
 ## Done
 
 <!-- Merged to main. Archive to missions/completed/ after 7 days -->
+
+### VM-004: Operative Manifest and Roster
+- **Assigned:** Mira
+- **Priority:** P2
+- **Branch:** mission/VM-004 (merged)
+- **Completed:** 2026-03-21
+- **Deliverable:** `agents/ROSTER.md`
+- **Summary:** Complete capability manifest for all 8 VALOR operatives (Mira, Crazy-Eddie, Forge, Gage, Zeke, Rook, Herbie, Paladin). YAML frontmatter format with capabilities, domain keywords, model tier preferences, tool access, escalation rules, and limitations. Safety-critical escalation patterns documented for Director hard-coding.
+
+### VM-005: Director Benchmark Analysis
+- **Assigned:** Mira
+- **Priority:** P1
+- **Branch:** mission/VM-005 (merged)
+- **Completed:** 2026-03-21
+- **Deliverable:** `docs/director-model-selection.md`
+- **Summary:** Comprehensive analysis of 7 local LLM models for Director role. **Final recommendation: Gemma3:27B (single-gear architecture)** — 79/98 (80.6%), 7.5s latency, best decomposition among reliable models. Alternative: Qwen3:8B + Nemotron dual-gear. Critical safety finding: hard-coded pre-LLM gates REQUIRED for financial transactions, mass communications, destructive operations, public content. Document includes complete analysis, failure modes, safety gate implementation examples.
