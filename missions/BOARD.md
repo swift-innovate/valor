@@ -1,7 +1,7 @@
 # VALOR Mission Board
 
-Last updated: 2026-03-21T18:30:00Z
-Updated by: VALOR/Gage
+Last updated: 2026-03-21T18:35:00Z
+Updated by: VALOR/Mira
 
 ---
 
@@ -99,6 +99,17 @@ Updated by: VALOR/Gage
 - **Description:** Analyst agent with multi-model review verdict.
 - **Status:** Review
 - **Updated:** 2026-03-21 18:30Z
+
+### VM-016: Mission Control Dashboard NATS Integration
+- **Assigned:** Mira
+- **Priority:** P2
+- **Branch:** mission/VM-016
+- **Depends on:** VM-001 (NATS schema), VM-002 (NATS client)
+- **Description:** Update Mission Control (Hono dashboard at src/dashboard/) to display real-time data from NATS. Replace static DB queries with live NATS subscriptions. Implement: NATS subscriber, in-memory state manager, SSE endpoint for push updates, live Overview page (fleet status, recent missions, activity feed), live Missions page (full board with filters).
+- **Acceptance:** Dashboard displays real-time mission updates, operative heartbeats, sitreps, and system events from NATS. No polling. SSE push architecture. Connection status indicator.
+- **Status:** Review
+- **Updated:** 2026-03-21 18:30Z
+- **Notes:** COMPLETE. NATSSubscriber connects on startup, NATSStateManager maintains in-memory state, SSE endpoint at /dashboard/sse, live Overview and Missions pages with auto-reconnect. Documentation at docs/dashboard-nats-integration.md. Ready for live NATS testing.
 
 ---
 
