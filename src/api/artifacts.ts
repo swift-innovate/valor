@@ -1,4 +1,4 @@
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
 import {
   createArtifact,
   getArtifact,
@@ -8,16 +8,9 @@ import {
   deleteArtifact,
 } from "../db/repositories/artifact-repo.js";
 import { ArtifactType } from "../types/index.js";
+import { requireDirector } from "../auth/index.js";
 
 export const artifactRoutes = new Hono();
-
-function requireDirector(c: Context): Response | null {
-  const role = c.req.header("X-VALOR-Role");
-  if (role !== "director" && role !== "system") {
-    return c.json({ error: "Only the Director can delete artifacts" }, 403) as unknown as Response;
-  }
-  return null;
-}
 
 // List artifacts (filterable by ?created_by=&conversation_id=&content_type=)
 artifactRoutes.get("/", (c) => {

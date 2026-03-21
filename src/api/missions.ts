@@ -1,4 +1,4 @@
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
 import {
   createMission,
   getMission,
@@ -16,19 +16,9 @@ import {
   abortMission,
 } from "../orchestrator/index.js";
 import type { MissionStatus } from "../types/index.js";
+import { requireDirector } from "../auth/index.js";
 
 export const missionRoutes = new Hono();
-
-// Only the Director or system can create and dispatch missions.
-// Agents that need missions created must send an escalation message to the Director or their designated Chief of Staff agent.
-// This will be replaced with proper auth when the engine gets authentication.
-function requireDirector(c: Context): Response | null {
-  const role = c.req.header("X-VALOR-Role");
-  if (role !== "director" && role !== "system") {
-    return c.json({ error: "Only the Director can create missions" }, 403) as unknown as Response;
-  }
-  return null;
-}
 
 // List missions with optional filters
 missionRoutes.get("/", (c) => {

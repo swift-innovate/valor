@@ -1,4 +1,4 @@
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
 import {
   createDivision,
   getDivision,
@@ -14,15 +14,9 @@ import {
   getDivisionLead,
 } from "../db/index.js";
 
-export const divisionRoutes = new Hono();
+import { requireDirector } from "../auth/index.js";
 
-function requireDirector(c: Context): Response | null {
-  const role = c.req.header("X-VALOR-Role");
-  if (role !== "director" && role !== "system") {
-    return c.json({ error: "Only the Director can perform this action" }, 403) as unknown as Response;
-  }
-  return null;
-}
+export const divisionRoutes = new Hono();
 
 // List all divisions
 divisionRoutes.get("/", (c) => {

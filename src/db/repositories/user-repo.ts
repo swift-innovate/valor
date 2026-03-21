@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
 import { getDb } from "../database.js";
+import { logger } from "../../utils/logger.js";
 
 export interface User {
   id: string;
@@ -94,5 +95,6 @@ export function userCount(): number {
 export function seedDefaultUser(): void {
   if (userCount() === 0) {
     createUser({ username: "director", password: "valor", role: "director" });
+    logger.warn("Default director account created (username: director, password: valor) — CHANGE THIS PASSWORD");
   }
 }
