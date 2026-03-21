@@ -128,10 +128,18 @@ registerSigintOutcomeCallback();
 // Start stream health monitor
 startHealthMonitor();
 
+// Start NATS subscriber for dashboard real-time updates
+import { natsSubscriber } from "./dashboard/nats-subscriber.js";
+const natsUrl = process.env.NATS_URL || "nats://localhost:4222";
+natsSubscriber.start(natsUrl).catch((err) => {
+  logger.warn("NATS subscriber failed to start - dashboard will not have real-time updates", { error: err.message });
+});
+
 const server = serve({ fetch: app.fetch, port: config.port }, () => {
   logger.info("VALOR engine started", {
     port: config.port,
     providers: listProviders().map((p) => p.id),
+    nats_connected: natsSubscriber.isConnected(),
   });
 });
 
@@ -139,10 +147,11 @@ const server = serve({ fetch: app.fetch, port: config.port }, () => {
 attachWebSocket(server as unknown as Server);
 
 // Graceful shutdown
-function shutdown() {
+async function shutdown() {
   logger.info("Shutting down...");
   closeWebSocket();
   stopHealthMonitor();
+  await natsSubscriber.stop();
   server.close();
   closeDb();
   process.exit(0);

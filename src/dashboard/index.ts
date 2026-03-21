@@ -1,8 +1,12 @@
 import { Hono } from "hono";
 import { overviewPage, missionsPage, approvalsPage, agentsPage, divisionsPage, decisionsPage, agentCardsPage, commsPage, artifactsPage, usersPage } from "./pages/index.js";
 import { requireDirectorSession } from "../auth/index.js";
+import { sseRoutes } from "./sse.js";
 
 export const dashboardRoutes = new Hono();
+
+// Mount SSE endpoint for real-time updates
+dashboardRoutes.route("/sse", sseRoutes);
 
 // Mount sub-pages under /dashboard
 dashboardRoutes.route("/", overviewPage);
