@@ -118,19 +118,7 @@ class NATSStateManager {
   // Event listeners for real-time updates
   private listeners: Set<(event: string, data: unknown) => void> = new Set();
 
-  constructor() {
-    // Initialize with known operatives from roster
-    const operatives = ["mira", "eddie", "forge", "gage", "zeke", "rook", "herbie", "paladin"];
-    for (const op of operatives) {
-      this.operatives.set(op, {
-        callsign: op,
-        status: "OFFLINE",
-        current_mission: null,
-        last_heartbeat: null,
-        uptime_seconds: 0,
-      });
-    }
-  }
+  // No hardcoded roster — operatives register dynamically via heartbeats
 
   /**
    * Subscribe to state change events
@@ -202,7 +190,7 @@ class NATSStateManager {
         title: sitrep.mission_id,
         description: "",
         priority: "P2",
-        assigned_to: sitrep.operative ?? "unknown",
+        assigned_to: msg.source ?? "unknown",
         status: "pending",
         progress_pct: null,
         created_at: msg.timestamp,
@@ -333,11 +321,22 @@ class NATSStateManager {
 
     // Update operative status if it's an agent event
     if (event.event_type === "agent.online" || event.event_type === "agent.offline") {
-      const operative = this.operatives.get(event.details.agent as string);
-      if (operative) {
+      const callsign = event.details.agent as string;
+      let operative = this.operatives.get(callsign);
+      if (!operative) {
+        // Dynamic registration via system event
+        operative = {
+          callsign,
+          status: event.event_type === "agent.online" ? "IDLE" : "OFFLINE",
+          current_mission: null,
+          last_heartbeat: null,
+          uptime_seconds: 0,
+        };
+        this.operatives.set(callsign, operative);
+      } else {
         operative.status = event.event_type === "agent.online" ? "IDLE" : "OFFLINE";
-        this.emit("operative.updated", operative);
       }
+      this.emit("operative.updated", operative);
     }
 
     this.emit("system.event", event);
@@ -643,13 +642,8 @@ class NATSStateManager {
     }
     this.heartbeatTimeouts.clear();
 
-    // Reset operatives to offline
-    for (const op of this.operatives.values()) {
-      op.status = "OFFLINE";
-      op.current_mission = null;
-      op.last_heartbeat = null;
-      op.uptime_seconds = 0;
-    }
+    // Clear all dynamically registered operatives
+    this.operatives.clear();
   }
 }
 

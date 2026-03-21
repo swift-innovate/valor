@@ -149,7 +149,7 @@ async function main(): Promise<void> {
       "",
       `NATS: \u2705 Connected`,
       `Director: \u2705 Listening on valor.missions.inbound`,
-      `Ollama: ${process.env.OLLAMA_BASE_URL ?? "http://localhost:11434"}`,
+      `Ollama: ${process.env.OLLAMA_BASE_URL ?? "http://starbase:40114"}`,
       "",
       "_Use /mission <text> to dispatch a mission_",
     ];

@@ -26,7 +26,7 @@ import { logger } from "../src/utils/logger.js";
 import { config } from "../src/config.js";
 
 const NATS_URL = process.env.NATS_URL ?? "nats://localhost:4222";
-const OLLAMA_BASE_URL = config.ollamaBaseUrl ?? "http://localhost:11434";
+const OLLAMA_BASE_URL = config.ollamaBaseUrl ?? "http://starbase:40114";
 
 let missionCounter = 0;
 let isShuttingDown = false;

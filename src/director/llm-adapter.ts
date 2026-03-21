@@ -33,7 +33,7 @@ export interface LlmResponse {
 // Ollama HTTP client
 // ---------------------------------------------------------------------------
 
-const DEFAULT_OLLAMA_URL = "http://localhost:11434";
+const DEFAULT_OLLAMA_URL = "http://starbase:40114";
 const DEFAULT_TIMEOUT_MS = 60_000; // 60 seconds
 
 /**
