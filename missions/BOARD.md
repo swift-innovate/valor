@@ -1,6 +1,6 @@
 # VALOR Mission Board
 
-Last updated: 2026-03-21T14:45:00Z  
+Last updated: 2026-03-21T15:00:00Z  
 Updated by: VALOR/Mira
 
 ---
@@ -25,12 +25,12 @@ Updated by: VALOR/Mira
 - **Assigned:** Mira
 - **Priority:** P1
 - **Branch:** mission/VM-005
-- **Depends on:** Benchmark results from CITADEL (running now)
+- **Depends on:** Benchmark results from CITADEL (4 of 7 complete)
 - **Description:** Analyze benchmark scorecard results when available. Write `docs/director-model-selection.md` with: score comparison table, latency analysis, category-by-category breakdown, Gear 1 vs Gear 2 recommendation, failure mode notes per model.
 - **Acceptance:** Clear model recommendation backed by data. Tom approves selection.
-- **Status:** Blocked — awaiting benchmark completion
-- **Updated:** 2026-03-21
-- **Notes:** Benchmark script running on CITADEL against qwen3, deepseek-r1, llama4:scout, nemotron-cascade-2. Results will land in `results/scorecard_*.md`.
+- **Status:** WIP — Provisional analysis complete, awaiting final 3 models
+- **Updated:** 2026-03-21 15:00Z
+- **Notes:** Document created with 4 completed models (Qwen3, Nemotron, DeepSeek-R1, Qwen3.5:35b). Provisional recommendation: Qwen3:8B (Gear 1), Nemotron-Cascade-2:31.6B (Gear 2). Critical safety gates documented. Awaiting: qwen3:32b, qwen3.5:27b, gemma3:27b.
 
 ---
 
