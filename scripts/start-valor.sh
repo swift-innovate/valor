@@ -129,7 +129,36 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 5. Health Check
+# 5. Telegram Gateway
+# ---------------------------------------------------------------------------
+echo ""
+echo "── Step 5: Telegram Gateway ──"
+
+if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
+  echo "  ⚠ TELEGRAM_BOT_TOKEN not set — skipping gateway"
+elif pgrep -f "gateways/telegram" &>/dev/null; then
+  echo "  ✓ Telegram gateway already running"
+else
+  echo "  Starting Telegram gateway..."
+  NATS_URL="$NATS_URL" \
+  TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
+  PRINCIPAL_TELEGRAM_ID="${PRINCIPAL_TELEGRAM_ID:-8551062231}" \
+  OLLAMA_BASE_URL="$OLLAMA_BASE_URL" \
+  LOG_LEVEL=info \
+  nohup node --import tsx gateways/telegram/index.ts \
+    > "$LOG_DIR/telegram-gateway.log" 2>&1 &
+  echo $! > "$LOG_DIR/telegram-gateway.pid"
+  sleep 3
+
+  if pgrep -f "gateways/telegram" &>/dev/null; then
+    echo "  ✓ Telegram gateway started (PID $(cat "$LOG_DIR/telegram-gateway.pid"))"
+  else
+    echo "  ✗ Telegram gateway failed — check $LOG_DIR/telegram-gateway.log"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 6. Health Check
 # ---------------------------------------------------------------------------
 echo ""
 echo "── Health Check ──"
@@ -160,6 +189,15 @@ if pgrep -f "operative-consumer.ts" &>/dev/null; then
   echo "  ✓ Consumer ($OPERATIVE): running"
 else
   echo "  ✗ Consumer ($OPERATIVE): not running"
+fi
+
+# Telegram
+if pgrep -f "gateways/telegram" &>/dev/null; then
+  echo "  ✓ Telegram gateway: running"
+elif [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
+  echo "  ⚠ Telegram gateway: skipped (no token)"
+else
+  echo "  ✗ Telegram gateway: not running"
 fi
 
 echo ""

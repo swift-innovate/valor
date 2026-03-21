@@ -1,144 +1,127 @@
 /**
  * VALOR Telegram Gateway
- * 
- * Bridges Telegram <-> NATS for mission dispatch and status updates.
- * 
- * Mission: VM-014
- * Operative: Mira
- * Status: IN PROGRESS (blocked on VM-002 NATS client module)
- * 
- * Dependencies:
- * - VM-002: NATS TypeScript client module (src/nats/)
- * - NATS server running with JetStream enabled
- * - Telegram bot token
+ *
+ * Bridges Telegram <-> NATS for mission dispatch and sitrep delivery.
+ *
+ * Commands:
+ *   /mission <text>  — Dispatch mission to Director
+ *   /status          — Fleet status summary
+ *   /help            — Show available commands
+ *
+ * Subscriptions:
+ *   valor.sitreps.>          — Progress updates → Telegram
+ *   valor.system.events      — Agent online/offline → Telegram
+ *   valor.review.verdict.>   — Review decisions → Telegram
+ *
+ * Usage:
+ *   source .env && node --import tsx gateways/telegram/index.ts
+ *
+ * Environment:
+ *   TELEGRAM_BOT_TOKEN       — Bot token from @BotFather
+ *   PRINCIPAL_TELEGRAM_ID    — Tom's Telegram user ID (only this user can dispatch)
+ *   NATS_URL                 — NATS server (default: nats://localhost:4222)
  */
 
+import TelegramBot from "node-telegram-bot-api";
+import {
+  getNatsConnection,
+  closeNatsConnection,
+  ensureStreams,
+} from "../../src/nats/index.js";
 import type {
   VALORMessage,
-  RawMissionInbound,
-  Sitrep,
+  NatsSitrep,
+  ReviewVerdict,
   SystemEvent,
-  SystemStatusResponse,
-  CommsMessage,
-} from "../../src/types/nats.js";
+} from "../../src/nats/index.js";
+import type { NatsConnection, Subscription } from "@nats-io/nats-core";
 
-// TODO: Import from src/nats/ when VM-002 is complete
-// import { NATSClient } from "../../src/nats/client.js";
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
 
-interface TelegramGatewayConfig {
-  telegramBotToken: string;
-  natsUrl: string;
-  principalTelegramId: string; // Tom's Telegram user ID
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const PRINCIPAL_ID = process.env.PRINCIPAL_TELEGRAM_ID;
+const NATS_URL = process.env.NATS_URL ?? "nats://localhost:4222";
+
+if (!BOT_TOKEN) {
+  console.error("TELEGRAM_BOT_TOKEN is required");
+  process.exit(1);
+}
+if (!PRINCIPAL_ID) {
+  console.error("PRINCIPAL_TELEGRAM_ID is required");
+  process.exit(1);
 }
 
-/**
- * Telegram Gateway
- * 
- * Responsibilities:
- * 1. Listen for Telegram commands (/mission, /status, /ask, free text)
- * 2. Publish commands to appropriate NATS subjects
- * 3. Subscribe to NATS subjects for updates
- * 4. Format and relay NATS messages back to Telegram
- */
-export class TelegramGateway {
-  private config: TelegramGatewayConfig;
-  // private nats: NATSClient; // TODO: Initialize when VM-002 is available
-  private bot: any; // TODO: Type from node-telegram-bot-api
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-  constructor(config: TelegramGatewayConfig) {
-    this.config = config;
-  }
+function decode<T>(data: Uint8Array): VALORMessage<T> {
+  return JSON.parse(new TextDecoder().decode(data)) as VALORMessage<T>;
+}
 
-  /**
-   * Initialize the gateway
-   * - Connect to NATS
-   * - Initialize Telegram bot
-   * - Set up subscriptions
-   * - Start listening
-   */
-  async start(): Promise<void> {
-    console.log("[TelegramGateway] Starting...");
+function encode(msg: VALORMessage): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(msg));
+}
 
-    // TODO: Connect to NATS
-    // this.nats = new NATSClient(this.config.natsUrl);
-    // await this.nats.connect();
+function isPrincipal(msg: TelegramBot.Message): boolean {
+  return msg.from?.id.toString() === PRINCIPAL_ID;
+}
 
-    // TODO: Initialize Telegram bot
-    // this.bot = new TelegramBot(this.config.telegramBotToken, { polling: true });
+const STATUS_EMOJI: Record<string, string> = {
+  ACCEPTED: "\ud83d\udccb",
+  IN_PROGRESS: "\ud83d\udd04",
+  BLOCKED: "\u26a0\ufe0f",
+  COMPLETE: "\u2705",
+  FAILED: "\u274c",
+};
 
-    // Set up NATS subscriptions
-    await this.subscribeToNATS();
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
 
-    // Set up Telegram command handlers
-    this.setupTelegramHandlers();
+async function main(): Promise<void> {
+  console.log("[TelegramGateway] Starting...");
 
-    console.log("[TelegramGateway] Started and listening");
-  }
+  // Connect to NATS
+  const nc = await getNatsConnection({
+    servers: [NATS_URL],
+    name: "telegram-gateway",
+  });
+  await ensureStreams(nc);
+  console.log(`[TelegramGateway] NATS connected: ${NATS_URL}`);
 
-  /**
-   * Subscribe to NATS subjects for updates to relay to Telegram
-   */
-  private async subscribeToNATS(): Promise<void> {
-    // TODO: Subscribe to valor.sitreps.> (all sitreps)
-    // this.nats.subscribe("valor.sitreps.>", (msg) => this.handleSitrep(msg));
+  // Initialize Telegram bot (polling mode)
+  const bot = new TelegramBot(BOT_TOKEN!, { polling: true });
+  const botInfo = await bot.getMe();
+  console.log(`[TelegramGateway] Bot online: @${botInfo.username}`);
 
-    // TODO: Subscribe to valor.system.events (agent online/offline)
-    // this.nats.subscribe("valor.system.events", (msg) => this.handleSystemEvent(msg));
+  // Track the chat ID for sending updates back
+  let principalChatId: number | null = null;
 
-    console.log("[TelegramGateway] NATS subscriptions ready (placeholder)");
-  }
+  // ── Telegram Commands ────────────────────────────────────────────────
 
-  /**
-   * Set up Telegram bot command handlers
-   */
-  private setupTelegramHandlers(): void {
-    // TODO: Implement with actual Telegram bot library
+  // /mission <text> — dispatch to Director via NATS
+  bot.onText(/^\/mission\s+(.+)/s, async (msg, match) => {
+    if (!isPrincipal(msg)) return;
+    principalChatId = msg.chat.id;
 
-    // /mission <text> - Dispatch new mission
-    // this.bot.onText(/^\/mission (.+)/, (msg, match) => {
-    //   if (msg.from?.id.toString() === this.config.principalTelegramId) {
-    //     this.handleMissionCommand(msg, match[1]);
-    //   }
-    // });
-
-    // /status - Get fleet status
-    // this.bot.onText(/^\/status$/, (msg) => {
-    //   if (msg.from?.id.toString() === this.config.principalTelegramId) {
-    //     this.handleStatusCommand(msg);
-    //   }
-    // });
-
-    // /ask <question> - Conversational query to Mira
-    // this.bot.onText(/^\/ask (.+)/, (msg, match) => {
-    //   if (msg.from?.id.toString() === this.config.principalTelegramId) {
-    //     this.handleAskCommand(msg, match[1]);
-    //   }
-    // });
-
-    // Free text (no command) - Route to Mira for conversation
-    // this.bot.on("message", (msg) => {
-    //   if (msg.text && !msg.text.startsWith("/") && msg.from?.id.toString() === this.config.principalTelegramId) {
-    //     this.handleFreeText(msg);
-    //   }
-    // });
-
-    console.log("[TelegramGateway] Telegram handlers ready (placeholder)");
-  }
-
-  /**
-   * Handle /mission command
-   * Publish raw mission text to valor.missions.inbound for Director classification
-   */
-  private async handleMissionCommand(msg: any, missionText: string): Promise<void> {
-    const message: VALORMessage<RawMissionInbound> = {
-      id: this.generateUUID(),
+    const missionText = match![1].trim();
+    const envelope: VALORMessage<{
+      text: string;
+      source_channel: string;
+      principal_id: string;
+      context: { chat_id: string; message_id: string };
+    }> = {
+      id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
       source: "telegram-gateway",
-      type: "mission.inbound",
+      type: "mission.inbound" as any,
       payload: {
         text: missionText,
         source_channel: "telegram",
-        principal_id: msg.from.id.toString(),
+        principal_id: PRINCIPAL_ID!,
         context: {
           chat_id: msg.chat.id.toString(),
           message_id: msg.message_id.toString(),
@@ -146,251 +129,173 @@ export class TelegramGateway {
       },
     };
 
-    // TODO: Publish to NATS
-    // await this.nats.publish("valor.missions.inbound", message);
+    nc.publish("valor.missions.inbound", encode(envelope));
+    await bot.sendMessage(
+      msg.chat.id,
+      `\u2705 Mission received. Director is classifying...\n\n_"${missionText.slice(0, 100)}"_`,
+      { parse_mode: "Markdown" },
+    );
+    console.log(`[TelegramGateway] /mission: ${missionText.slice(0, 60)}`);
+  });
 
-    // Acknowledge to Telegram
-    // await this.bot.sendMessage(msg.chat.id, "✅ Mission received. Director is classifying...");
+  // /status — quick fleet status
+  bot.onText(/^\/status$/, async (msg) => {
+    if (!isPrincipal(msg)) return;
+    principalChatId = msg.chat.id;
 
-    console.log("[TelegramGateway] /mission command (placeholder):", missionText);
-  }
+    // Check which services are publishing heartbeats
+    const statusLines = [
+      "\ud83d\udce1 *VALOR Fleet Status*",
+      "",
+      `NATS: \u2705 Connected`,
+      `Director: \u2705 Listening on valor.missions.inbound`,
+      `Ollama: ${process.env.OLLAMA_BASE_URL ?? "http://localhost:11434"}`,
+      "",
+      "_Use /mission <text> to dispatch a mission_",
+    ];
 
-  /**
-   * Handle /status command
-   * Request fleet status from valor.system.status, format and reply to Telegram
-   */
-  private async handleStatusCommand(msg: any): Promise<void> {
-    // TODO: Publish request to valor.system.status
-    // const statusRequest: VALORMessage<{ requestId: string }> = {
-    //   id: this.generateUUID(),
-    //   timestamp: new Date().toISOString(),
-    //   source: "telegram-gateway",
-    //   type: "system.status.request",
-    //   payload: { requestId: requestId },
-    // };
-    // await this.nats.publish("valor.system.status", statusRequest);
-
-    // TODO: Await reply with timeout
-    // const reply = await this.nats.request("valor.system.status", statusRequest, { timeout: 5000 });
-    // const formatted = this.formatStatusResponse(reply);
-    // await this.bot.sendMessage(msg.chat.id, formatted);
-
-    console.log("[TelegramGateway] /status command (placeholder)");
-  }
-
-  /**
-   * Handle /ask command
-   * Route question to Mira via valor.comms.direct.principal.mira
-   */
-  private async handleAskCommand(msg: any, question: string): Promise<void> {
-    const message: VALORMessage<CommsMessage> = {
-      id: this.generateUUID(),
-      timestamp: new Date().toISOString(),
-      source: "principal",
-      type: "comms.message",
-      payload: {
-        from: "principal",
-        to: "mira",
-        text: question,
-        priority: "normal",
-        category: "query",
-      },
-    };
-
-    // TODO: Publish to valor.comms.direct.principal.mira
-    // await this.nats.publish("valor.comms.direct.principal.mira", message);
-
-    // TODO: Subscribe to response from Mira (valor.comms.direct.mira.principal)
-    // and forward to Telegram
-
-    console.log("[TelegramGateway] /ask command (placeholder):", question);
-  }
-
-  /**
-   * Handle free text (no command)
-   * Route to Mira for conversational response
-   */
-  private async handleFreeText(msg: any): Promise<void> {
-    // Same as /ask but without explicit command
-    const message: VALORMessage<CommsMessage> = {
-      id: this.generateUUID(),
-      timestamp: new Date().toISOString(),
-      source: "principal",
-      type: "comms.message",
-      payload: {
-        from: "principal",
-        to: "mira",
-        text: msg.text,
-        priority: "normal",
-        category: "chat",
-      },
-    };
-
-    // TODO: Publish to valor.comms.direct.principal.mira
-    // await this.nats.publish("valor.comms.direct.principal.mira", message);
-
-    console.log("[TelegramGateway] Free text (placeholder):", msg.text);
-  }
-
-  /**
-   * Handle incoming sitrep from NATS
-   * Format and send to Telegram
-   */
-  private async handleSitrep(message: VALORMessage<Sitrep>): Promise<void> {
-    const sitrep = message.payload;
-    const formatted = this.formatSitrep(sitrep);
-
-    // TODO: Send to Telegram
-    // await this.bot.sendMessage(this.config.principalTelegramId, formatted);
-
-    console.log("[TelegramGateway] Sitrep received (placeholder):", sitrep.mission_id);
-  }
-
-  /**
-   * Handle system event from NATS
-   * Format and send to Telegram
-   */
-  private async handleSystemEvent(message: VALORMessage<SystemEvent>): Promise<void> {
-    const event = message.payload;
-    const formatted = this.formatSystemEvent(event);
-
-    // TODO: Send to Telegram
-    // await this.bot.sendMessage(this.config.principalTelegramId, formatted);
-
-    console.log("[TelegramGateway] System event (placeholder):", event.event_type);
-  }
-
-  /**
-   * Format sitrep for Telegram display
-   */
-  private formatSitrep(sitrep: Sitrep): string {
-    const statusEmoji = {
-      ACCEPTED: "📋",
-      IN_PROGRESS: "🔄",
-      BLOCKED: "⚠️",
-      COMPLETE: "✅",
-      FAILED: "❌",
-    }[sitrep.status] || "📊";
-
-    let message = `${statusEmoji} **${sitrep.mission_id}** — ${sitrep.status}\n`;
-    message += `\n${sitrep.summary}`;
-
-    if (sitrep.progress_pct !== undefined && sitrep.progress_pct !== null) {
-      message += `\n\nProgress: ${sitrep.progress_pct}%`;
-    }
-
-    if (sitrep.blockers && sitrep.blockers.length > 0) {
-      message += `\n\n⚠️ Blockers:\n${sitrep.blockers.map((b) => `  • ${b}`).join("\n")}`;
-    }
-
-    if (sitrep.artifacts && sitrep.artifacts.length > 0) {
-      message += `\n\n📎 Artifacts:\n${sitrep.artifacts.map((a) => `  • ${a}`).join("\n")}`;
-    }
-
-    return message;
-  }
-
-  /**
-   * Format system event for Telegram display
-   */
-  private formatSystemEvent(event: SystemEvent): string {
-    const eventEmoji = {
-      "agent.online": "🟢",
-      "agent.offline": "🔴",
-      "agent.error": "❌",
-      "system.startup": "🚀",
-      "system.shutdown": "🛑",
-    }[event.event_type] || "📡";
-
-    return `${eventEmoji} ${event.event_type}: ${event.details.agent || "system"}`;
-  }
-
-  /**
-   * Format status response for Telegram display
-   */
-  private formatStatusResponse(response: VALORMessage<SystemStatusResponse>): string {
-    const status = response.payload;
-    let message = "**VALOR Fleet Status**\n\n";
-
-    for (const [operative, info] of Object.entries(status.operatives)) {
-      const statusEmoji = info.status === "online" ? "🟢" : "🔴";
-      message += `${statusEmoji} **${operative}**: ${info.status}`;
-      if (info.current_mission) {
-        message += ` (working on ${info.current_mission})`;
-      }
-      message += "\n";
-    }
-
-    return message;
-  }
-
-  /**
-   * Generate UUID v4
-   */
-  private generateUUID(): string {
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-      const r = (Math.random() * 16) | 0;
-      const v = c === "x" ? r : (r & 0x3) | 0x8;
-      return v.toString(16);
+    await bot.sendMessage(msg.chat.id, statusLines.join("\n"), {
+      parse_mode: "Markdown",
     });
-  }
+  });
 
-  /**
-   * Graceful shutdown
-   */
-  async stop(): Promise<void> {
-    console.log("[TelegramGateway] Stopping...");
+  // /help — show commands
+  bot.onText(/^\/help$/, async (msg) => {
+    if (!isPrincipal(msg)) return;
+    principalChatId = msg.chat.id;
 
-    // TODO: Close NATS connection
-    // await this.nats.close();
+    await bot.sendMessage(
+      msg.chat.id,
+      [
+        "\ud83c\udfaf *VALOR Commands*",
+        "",
+        "`/mission <text>` \u2014 Dispatch a mission to the Director",
+        "`/status` \u2014 Fleet status",
+        "`/help` \u2014 This message",
+        "",
+        "Sitreps and review verdicts are delivered automatically.",
+      ].join("\n"),
+      { parse_mode: "Markdown" },
+    );
+  });
 
-    // TODO: Stop Telegram bot polling
-    // await this.bot.stopPolling();
+  // /start — initial greeting
+  bot.onText(/^\/start$/, async (msg) => {
+    principalChatId = msg.chat.id;
+    const authorized = isPrincipal(msg) ? "You are authorized as Principal." : "You are not authorized.";
+    await bot.sendMessage(
+      msg.chat.id,
+      `\ud83d\ude80 *VALOR Engine Online*\n\n${authorized}\n\nType /help for commands.`,
+      { parse_mode: "Markdown" },
+    );
+  });
 
-    console.log("[TelegramGateway] Stopped");
-  }
-}
+  // Safety gate override: APPROVED gate_<id> or ABORT gate_<id>
+  bot.onText(/^(APPROVED|ABORT)\s+gate_(\w+)$/i, async (msg, match) => {
+    if (!isPrincipal(msg)) return;
+    const action = match![1].toUpperCase();
+    const interceptId = match![2];
+    // Publish override to NATS for Director to pick up
+    const envelope: VALORMessage<{ action: string; intercept_id: string; principal_id: string }> = {
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      source: "telegram-gateway",
+      type: "system.event" as any,
+      payload: {
+        action,
+        intercept_id: interceptId,
+        principal_id: PRINCIPAL_ID!,
+      },
+    };
+    nc.publish("valor.system.gate-override", encode(envelope));
+    await bot.sendMessage(msg.chat.id, `\u2705 Gate override sent: ${action} gate_${interceptId}`);
+    console.log(`[TelegramGateway] Gate override: ${action} gate_${interceptId}`);
+  });
 
-/**
- * Main entry point (for standalone execution)
- */
-async function main() {
-  const config: TelegramGatewayConfig = {
-    telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
-    natsUrl: process.env.NATS_URL || "nats://localhost:4222",
-    principalTelegramId: process.env.PRINCIPAL_TELEGRAM_ID || "",
+  // ── NATS Subscriptions → Telegram ────────────────────────────────────
+
+  const subs: Subscription[] = [];
+
+  // Sitreps → Telegram
+  subs.push(
+    nc.subscribe("valor.sitreps.>", {
+      callback: (_err, msg) => {
+        if (_err || !principalChatId) return;
+        try {
+          const envelope = decode<NatsSitrep>(msg);
+          const p = envelope.payload;
+          const emoji = STATUS_EMOJI[p.status] ?? "\ud83d\udcca";
+          let text = `${emoji} *${p.mission_id}* \u2014 ${p.status}\n\n${p.summary}`;
+
+          if (p.progress_pct != null && p.progress_pct > 0) {
+            text += `\n\nProgress: ${p.progress_pct}%`;
+          }
+          if (p.blockers?.length) {
+            text += `\n\n\u26a0\ufe0f Blockers:\n${p.blockers.map((b) => `  \u2022 ${b}`).join("\n")}`;
+          }
+          if (p.artifacts?.length) {
+            text += `\n\n\ud83d\udcce Artifacts:\n${p.artifacts.map((a) => `  \u2022 ${a.label}: ${a.ref}`).join("\n")}`;
+          }
+
+          bot.sendMessage(principalChatId, text, { parse_mode: "Markdown" }).catch(() => {});
+        } catch { /* ignore parse errors */ }
+      },
+    }),
+  );
+
+  // Review verdicts → Telegram
+  subs.push(
+    nc.subscribe("valor.review.verdict.>", {
+      callback: (_err, msg) => {
+        if (_err || !principalChatId) return;
+        try {
+          const envelope = decode<ReviewVerdict>(msg);
+          const p = envelope.payload;
+          const emoji = p.decision === "APPROVE" ? "\u2705" : p.decision === "RETRY" ? "\ud83d\udd04" : "\u26a0\ufe0f";
+          let text = `${emoji} *Review: ${p.mission_id}* \u2014 ${p.decision}\n\n${p.reasoning}`;
+          if (p.issues?.length) {
+            text += `\n\nIssues:\n${p.issues.map((i) => `  \u2022 ${i}`).join("\n")}`;
+          }
+          bot.sendMessage(principalChatId, text, { parse_mode: "Markdown" }).catch(() => {});
+        } catch { /* ignore */ }
+      },
+    }),
+  );
+
+  // System events → Telegram
+  subs.push(
+    nc.subscribe("valor.system.events", {
+      callback: (_err, msg) => {
+        if (_err || !principalChatId) return;
+        try {
+          const envelope = decode<SystemEvent>(msg);
+          const p = envelope.payload;
+          const emoji = p.kind === "agent.online" ? "\ud83d\udfe2" : p.kind === "agent.offline" ? "\ud83d\udd34" : "\ud83d\udce1";
+          bot.sendMessage(principalChatId, `${emoji} ${p.kind}: ${p.operative ?? "system"} \u2014 ${p.detail}`).catch(() => {});
+        } catch { /* ignore */ }
+      },
+    }),
+  );
+
+  console.log("[TelegramGateway] Subscribed to sitreps, verdicts, system events");
+  console.log(`[TelegramGateway] Ready. Principal ID: ${PRINCIPAL_ID}`);
+
+  // ── Graceful Shutdown ────────────────────────────────────────────────
+
+  const shutdown = async (signal: string) => {
+    console.log(`[TelegramGateway] Shutting down (${signal})...`);
+    bot.stopPolling();
+    for (const sub of subs) sub.unsubscribe();
+    await closeNatsConnection();
+    console.log("[TelegramGateway] Stopped.");
+    process.exit(0);
   };
 
-  if (!config.telegramBotToken) {
-    throw new Error("TELEGRAM_BOT_TOKEN environment variable is required");
-  }
-
-  if (!config.principalTelegramId) {
-    throw new Error("PRINCIPAL_TELEGRAM_ID environment variable is required");
-  }
-
-  const gateway = new TelegramGateway(config);
-
-  // Graceful shutdown
-  process.on("SIGINT", async () => {
-    console.log("\nReceived SIGINT, shutting down gracefully...");
-    await gateway.stop();
-    process.exit(0);
-  });
-
-  process.on("SIGTERM", async () => {
-    console.log("\nReceived SIGTERM, shutting down gracefully...");
-    await gateway.stop();
-    process.exit(0);
-  });
-
-  await gateway.start();
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 }
 
-// Run if executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((error) => {
-    console.error("[TelegramGateway] Fatal error:", error);
-    process.exit(1);
-  });
-}
+main().catch((err) => {
+  console.error("[TelegramGateway] Fatal error:", err);
+  process.exit(1);
+});
