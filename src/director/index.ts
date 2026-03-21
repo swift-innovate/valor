@@ -47,8 +47,8 @@ export async function handleMission(
 
   const startMs = Date.now();
 
-  // Step 1+2: Safety gates → LLM classification
-  const classifierResult = await classifyMission(missionText);
+  // Step 1+2: Safety gates → LLM classification (with progress updates)
+  const classifierResult = await classifyMission(missionText, missionIdPrefix, nc);
 
   // Step 3: Dispatch to NATS
   const dispatchResult = await dispatchMission(
