@@ -7,11 +7,11 @@ export function createSqliteAdapter(dbPath: string): DbAdapter {
   db.pragma("foreign_keys = ON");
 
   return {
-    queryAll<T extends DbRow = DbRow>(sql: string, params: Record<string, unknown> = {}): T[] {
+    queryAll<T = DbRow>(sql: string, params: Record<string, unknown> = {}): T[] {
       return db.prepare(sql).all(params) as T[];
     },
 
-    queryOne<T extends DbRow = DbRow>(
+    queryOne<T = DbRow>(
       sql: string,
       params: Record<string, unknown> = {},
     ): T | null {

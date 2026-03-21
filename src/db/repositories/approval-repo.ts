@@ -74,16 +74,14 @@ export function resolveApproval(
 }
 
 export function getApproval(id: string): Approval | null {
-  const row = getDb().queryOne("SELECT * FROM approvals WHERE id = @id", { id });
-  return (row as Approval) ?? null;
+  return getDb().queryOne<Approval>("SELECT * FROM approvals WHERE id = @id", { id });
 }
 
 export function getPendingApproval(missionId: string): Approval | null {
-  const row = getDb().queryOne(
+  return getDb().queryOne<Approval>(
     "SELECT * FROM approvals WHERE mission_id = @mission_id AND status = 'pending' ORDER BY created_at DESC LIMIT 1",
     { mission_id: missionId },
   );
-  return (row as Approval) ?? null;
 }
 
 export function listApprovals(filters?: {
@@ -106,5 +104,5 @@ export function listApprovals(filters?: {
   if (conditions.length) sql += " WHERE " + conditions.join(" AND ");
   sql += " ORDER BY created_at DESC";
 
-  return getDb().queryAll(sql, params) as Approval[];
+  return getDb().queryAll<Approval>(sql, params);
 }

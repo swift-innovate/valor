@@ -112,6 +112,7 @@ commsRoutes.post("/chats", async (c) => {
         conversation_id: conversationId,
         in_reply_to: openingEventId,
         category: "coordination",
+        attachments: [],
       });
 
       if (!openingEventId) openingEventId = event.id;

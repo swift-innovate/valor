@@ -105,13 +105,13 @@ function runPgQuery(connectionString: string, text: string, values: unknown[]): 
 
 export function createPostgresAdapter(connectionString: string): DbAdapter {
   return {
-    queryAll<T extends DbRow = DbRow>(sql: string, params: Record<string, unknown> = {}): T[] {
+    queryAll<T = DbRow>(sql: string, params: Record<string, unknown> = {}): T[] {
       const { text, values } = translateSql(sql, params);
       const { rows } = runPgQuery(connectionString, text, values);
       return rows as T[];
     },
 
-    queryOne<T extends DbRow = DbRow>(
+    queryOne<T = DbRow>(
       sql: string,
       params: Record<string, unknown> = {},
     ): T | null {

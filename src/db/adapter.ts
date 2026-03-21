@@ -1,6 +1,5 @@
-export interface DbRow {
-  [key: string]: unknown;
-}
+/** Base row type returned by query methods. Consumers may supply a narrower T. */
+export type DbRow = Record<string, unknown>;
 
 export interface DbResult {
   changes: number;
@@ -9,10 +8,10 @@ export interface DbResult {
 
 export interface DbAdapter {
   /** Query returning multiple rows */
-  queryAll<T extends DbRow = DbRow>(sql: string, params?: Record<string, unknown>): T[];
+  queryAll<T = DbRow>(sql: string, params?: Record<string, unknown>): T[];
 
   /** Query returning one row or null */
-  queryOne<T extends DbRow = DbRow>(sql: string, params?: Record<string, unknown>): T | null;
+  queryOne<T = DbRow>(sql: string, params?: Record<string, unknown>): T | null;
 
   /** Execute a statement (INSERT, UPDATE, DELETE) */
   execute(sql: string, params?: Record<string, unknown>): DbResult;
