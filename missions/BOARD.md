@@ -1,7 +1,7 @@
 # VALOR Mission Board
 
-Last updated: 2026-03-21T15:20:00Z  
-Updated by: VALOR/Mira
+Last updated: 2026-03-21T16:45:00Z
+Updated by: VALOR/Gage
 
 ---
 
@@ -29,16 +29,6 @@ Updated by: VALOR/Mira
 
 <!-- Missions waiting on dependencies -->
 
-### VM-002: NATS TypeScript Client Module
-- **Assigned:** Gage
-- **Priority:** P1
-- **Branch:** mission/VM-002
-- **Depends on:** VM-001 (NATS schema doc)
-- **Description:** Install `nats` npm package in valor-engine. Create `src/nats/client.ts` with: connection manager, typed publish/subscribe helpers per message schema, JetStream consumer setup, reconnect handling. Follow interfaces defined in VM-001.
-- **Acceptance:** Module compiles, connects to local NATS, can pub/sub on all defined subjects. Basic integration test suite.
-- **Status:** Blocked on VM-001
-- **Updated:** 2026-03-21
-
 ### VM-003: Agent-Tick NATS Consumer Prototype
 - **Assigned:** Gage
 - **Priority:** P2
@@ -54,6 +44,18 @@ Updated by: VALOR/Mira
 ## Review
 
 <!-- Completed work awaiting review/merge -->
+
+### VM-002: NATS TypeScript Client Module
+- **Assigned:** Gage
+- **Priority:** P1
+- **Branch:** mission/VM-002
+- **Depends on:** VM-001 (NATS schema doc)
+- **Description:** Install `nats` npm package in valor-engine. Create `src/nats/client.ts` with: connection manager, typed publish/subscribe helpers per message schema, JetStream consumer setup, reconnect handling. Follow interfaces defined in VM-001.
+- **Acceptance:** Module compiles, connects to local NATS, can pub/sub on all defined subjects. Basic integration test suite.
+- **Status:** Review
+- **Updated:** 2026-03-21 16:45Z
+- **Notes:** Complete. 6 files in src/nats/: types, client, streams, publishers, consumers, barrel export. model_tier aligned to local|efficient|balanced|frontier. Uses @nats-io v3.3.x packages. Typechecks clean.
+
 ### VM-007: Director Safety Gate Implementation Spec
 - **Assigned:** Crazy-Eddie
 - **Priority:** P1
