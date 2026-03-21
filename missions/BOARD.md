@@ -54,6 +54,16 @@ Updated by: VALOR/Mira
 ## Review
 
 <!-- Completed work awaiting review/merge -->
+### VM-007: Director Safety Gate Implementation Spec
+- **Assigned:** Crazy-Eddie
+- **Priority:** P1
+- **Branch:** mission/VM-007
+- **Depends on:** VM-005 (benchmark analysis)
+- **Description:** Design pre-LLM safety gate system. Pattern-based checks that run before Director sees a mission. P0 (financial), P1 (mass comms/destructive), P2 (public publish). Includes bypass mechanism and test cases.
+- **Acceptance:** Gage can implement the gate runner from this spec alone.
+- **Status:** Review
+- **Updated:** 2026-03-21
+- **Deliverable:** `docs/safety-gates.md`
 
 ---
 
