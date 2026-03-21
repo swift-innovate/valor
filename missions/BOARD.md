@@ -1,6 +1,6 @@
 # VALOR Mission Board
 
-Last updated: 2026-03-21T17:00:00Z
+Last updated: 2026-03-21T17:15:00Z
 Updated by: VALOR/Gage
 
 ---
@@ -21,15 +21,6 @@ Updated by: VALOR/Gage
 
 ## In Progress
 
-### VM-008: Deploy NATS Server and Validate VM-002
-- **Assigned:** Gage
-- **Priority:** P0
-- **Branch:** main
-- **Depends on:** VM-002
-- **Description:** Deploy nats-server, create JetStream streams, validate the NATS TypeScript client module end-to-end against a live server. Full lifecycle: publish mission, consume, publish sitrep.
-- **Status:** In Progress
-- **Updated:** 2026-03-21 17:00Z
-
 ---
 
 ## Blocked
@@ -47,6 +38,16 @@ Updated by: VALOR/Gage
 ---
 
 ## Review
+
+### VM-008: Deploy NATS Server and Validate VM-002
+- **Assigned:** Gage
+- **Priority:** P0
+- **Branch:** main
+- **Depends on:** VM-002
+- **Description:** Deploy nats-server, create JetStream streams, validate the NATS TypeScript client module end-to-end against a live server. Full lifecycle: publish mission, consume, publish sitrep.
+- **Status:** Review
+- **Updated:** 2026-03-21 17:15Z
+- **Notes:** COMPLETE. 27/27 checks passed against nats-server v2.11.4. Full lifecycle validated: connect → streams → consumers → mission publish/consume → sitrep → review → heartbeat → comms → status request/reply → graceful shutdown. Validation script at `scripts/validate-nats.ts`.
 
 ### VM-002: NATS TypeScript Client Module
 - **Assigned:** Gage

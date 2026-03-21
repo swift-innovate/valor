@@ -67,7 +67,9 @@ async function main(): Promise<void> {
 
   // 1. Connect
   console.log("Step 1: Connect to NATS");
-  const nc = await getNatsConnection({ servers: ["nats://localhost:4222"], name: "vm-008-validator" });
+  const natsUrl = process.env.NATS_URL ?? "nats://localhost:4222";
+  console.log(`  Server: ${natsUrl}`);
+  const nc = await getNatsConnection({ servers: [natsUrl], name: "vm-008-validator" });
   assert(nc !== null, "Connected to NATS");
 
   const healthy = await healthCheck();
@@ -226,7 +228,7 @@ async function main(): Promise<void> {
     last_activity: new Date().toISOString(),
     metadata: null,
   };
-  await publishHeartbeat(nc, OPERATIVE, heartbeat);
+  publishHeartbeat(nc, OPERATIVE, heartbeat);
   assert(true, "Heartbeat published");
 
   const comms: CommsPayload = {
