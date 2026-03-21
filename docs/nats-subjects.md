@@ -24,6 +24,7 @@ This document defines the complete NATS subject hierarchy and message payload sc
 ### 1. Mission Subjects
 
 ```
+valor.missions.inbound                    # Gateway → Director: raw unclassified mission from Principal
 valor.missions.{operative}.pending        # Director → operative: new mission waiting for pickup
 valor.missions.{operative}.active         # Operative → all: mission picked up, work starting
 valor.missions.{operative}.complete       # Operative → all: mission finished, awaiting review
@@ -128,6 +129,7 @@ interface VALORMessage<T = unknown> {
 }
 
 type VALORMessageType =
+  | "mission.inbound"
   | "mission.brief"
   | "mission.pickup"
   | "mission.complete"
@@ -141,6 +143,34 @@ type VALORMessageType =
   | "system.status.response"
   | "system.event";
 ```
+
+---
+
+### RawMissionInbound
+
+_Published to `valor.missions.inbound` by gateways (Telegram, CLI, etc.). This is an unclassified, raw mission request from the Principal that the Director must classify and route._
+
+```typescript
+interface RawMissionInbound {
+  text: string;                // Raw mission text from Principal (e.g., "/mission Launch email campaign")
+  source_channel: "telegram" | "cli" | "dashboard" | "api";
+  principal_id: string;        // User identifier from source system
+  context: {                   // Optional context from the source
+    chat_id?: string;          // For Telegram
+    message_id?: string;
+    replied_to?: string;       // If this is a reply to a previous message
+    [key: string]: unknown;
+  } | null;
+}
+
+type RawMissionInboundMessage = VALORMessage<RawMissionInbound> & { type: "mission.inbound" };
+```
+
+**Director responsibilities:**
+1. Subscribe to `valor.missions.inbound`
+2. Classify and decompose the raw mission text
+3. Determine operative assignment and priority
+4. Publish one or more `MissionBrief` messages to `valor.missions.{operative}.pending`
 
 ---
 
