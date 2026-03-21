@@ -1,7 +1,7 @@
 # VALOR Mission Board
 
-Last updated: 2026-03-21T17:30:00Z
-Updated by: VALOR/Mira
+Last updated: 2026-03-21T18:15:00Z
+Updated by: VALOR/Gage
 
 ---
 
@@ -38,6 +38,16 @@ Updated by: VALOR/Mira
 ---
 
 ## Review
+
+### VM-017: End-to-End Integration Test
+- **Assigned:** Gage
+- **Priority:** P0
+- **Branch:** mission/VM-017
+- **Depends on:** VM-002, VM-012, VM-013, VM-014
+- **Description:** Validate complete Phase 1 pipeline end-to-end: mission text → safety gates → classifier → dispatcher → NATS → consumer → sitrep → review.
+- **Status:** Review
+- **Updated:** 2026-03-21 18:15Z
+- **Notes:** COMPLETE. 5/5 tests passed. Simple route, safety gate intercept, complex decomposition, gear escalation, consumer failure recovery. Test file at `tests/integration/e2e-mission-lifecycle.test.ts`. Results at `docs/e2e-test-results.md`.
 
 ### VM-008: Deploy NATS Server and Validate VM-002
 - **Assigned:** Gage
