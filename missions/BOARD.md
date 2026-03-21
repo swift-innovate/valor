@@ -1,6 +1,6 @@
 # VALOR Mission Board
 
-Last updated: 2026-03-21T18:15:00Z
+Last updated: 2026-03-21T18:30:00Z
 Updated by: VALOR/Gage
 
 ---
@@ -38,16 +38,6 @@ Updated by: VALOR/Gage
 ---
 
 ## Review
-
-### VM-017: End-to-End Integration Test
-- **Assigned:** Gage
-- **Priority:** P0
-- **Branch:** mission/VM-017
-- **Depends on:** VM-002, VM-012, VM-013, VM-014
-- **Description:** Validate complete Phase 1 pipeline end-to-end: mission text → safety gates → classifier → dispatcher → NATS → consumer → sitrep → review.
-- **Status:** Review
-- **Updated:** 2026-03-21 18:15Z
-- **Notes:** COMPLETE. 5/5 tests passed. Simple route, safety gate intercept, complex decomposition, gear escalation, consumer failure recovery. Test file at `tests/integration/e2e-mission-lifecycle.test.ts`. Results at `docs/e2e-test-results.md`.
 
 ### VM-008: Deploy NATS Server and Validate VM-002
 - **Assigned:** Gage
@@ -100,6 +90,15 @@ Updated by: VALOR/Gage
 - **Status:** Review
 - **Updated:** 2026-03-21 17:30Z
 - **Notes:** COMPLETE. Gateway fully implemented at `gateways/telegram/`. New types at `src/types/nats.ts`. Schema updated with `valor.missions.inbound` subject. Ready for integration with live NATS (VM-008). Thin bridge pattern - no business logic. Principal-only security.
+
+### VM-015: Analyst Agent Review Loop
+- **Assigned:** Crazy-Eddie
+- **Priority:** P2
+- **Branch:** mission/VM-015 (merged)
+- **Depends on:** VM-002 (NATS client)
+- **Description:** Analyst agent with multi-model review verdict.
+- **Status:** Review
+- **Updated:** 2026-03-21 18:30Z
 
 ---
 
