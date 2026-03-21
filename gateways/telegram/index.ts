@@ -262,6 +262,72 @@ async function main(): Promise<void> {
     }),
   );
 
+  // Mission lifecycle events → Telegram (active, complete, failed)
+  subs.push(
+    nc.subscribe("valor.missions.*.active", {
+      callback: (_err, msg) => {
+        if (_err || !principalChatId) return;
+        try {
+          const envelope = decode<{ mission_id: string; operative: string }>(
+            msg,
+          );
+          const p = envelope.payload;
+          bot
+            .sendMessage(
+              principalChatId,
+              `\ud83d\udce1 *${p.mission_id}* picked up by *${p.operative}*`,
+              { parse_mode: "Markdown" },
+            )
+            .catch(() => {});
+        } catch {
+          /* ignore */
+        }
+      },
+    }),
+  );
+
+  subs.push(
+    nc.subscribe("valor.missions.*.complete", {
+      callback: (_err, msg) => {
+        if (_err || !principalChatId) return;
+        try {
+          const envelope = decode<NatsSitrep>(msg);
+          const p = envelope.payload;
+          bot
+            .sendMessage(
+              principalChatId,
+              `\u2705 *${p.mission_id}* \u2014 COMPLETE\n\n${p.summary}`,
+              { parse_mode: "Markdown" },
+            )
+            .catch(() => {});
+        } catch {
+          /* ignore */
+        }
+      },
+    }),
+  );
+
+  subs.push(
+    nc.subscribe("valor.missions.*.failed", {
+      callback: (_err, msg) => {
+        if (_err || !principalChatId) return;
+        try {
+          const envelope = decode<NatsSitrep>(msg);
+          const p = envelope.payload;
+          let text = `\u274c *${p.mission_id}* \u2014 FAILED\n\n${p.summary}`;
+          if (p.blockers?.length) {
+            text += `\n\n\u26a0\ufe0f Blockers:\n${p.blockers.map((b) => `  \u2022 ${b}`).join("\n")}`;
+          }
+          bot
+            .sendMessage(principalChatId, text, { parse_mode: "Markdown" })
+            .catch(() => {});
+        } catch {
+          /* ignore */
+        }
+      },
+    }),
+  );
+
   // System events → Telegram
   subs.push(
     nc.subscribe("valor.system.events", {
