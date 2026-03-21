@@ -1,7 +1,7 @@
 # VALOR Mission Board
 
-Last updated: 2026-03-21T18:35:00Z
-Updated by: VALOR/Mira
+Last updated: 2026-03-21T18:45:00Z
+Updated by: VALOR/Gage
 
 ---
 
@@ -20,6 +20,20 @@ Updated by: VALOR/Mira
 ---
 
 ## In Progress
+
+---
+
+## Review
+
+### VM-020: Deploy and Start VALOR Services
+- **Assigned:** Gage
+- **Priority:** P0
+- **Branch:** mission/VM-020
+- **Depends on:** VM-002, VM-012, VM-013
+- **Description:** Deploy NATS, Director, and operative consumers as persistent services. Smoke test full pipeline.
+- **Status:** Review
+- **Updated:** 2026-03-21 18:45Z
+- **Notes:** COMPLETE. All services running: NATS (port 4222, JetStream enabled), Director (gemma3:27b via starbase:40114), Eddie consumer, Forge consumer. Smoke test PASSED — full pipeline: inbound → Director classify (ROUTE → forge, confidence 9) → consumer pickup → sitrep → complete. Startup script at `scripts/start-valor.sh`.
 
 ---
 
@@ -110,17 +124,6 @@ Updated by: VALOR/Mira
 - **Status:** Review
 - **Updated:** 2026-03-21 18:30Z
 - **Notes:** COMPLETE. NATSSubscriber connects on startup, NATSStateManager maintains in-memory state, SSE endpoint at /dashboard/sse, live Overview and Missions pages with auto-reconnect. Documentation at docs/dashboard-nats-integration.md. Ready for live NATS testing.
-
-### VM-019: VALOR Operational Readiness Checklist
-- **Assigned:** Mira
-- **Priority:** P1
-- **Branch:** mission/VM-019
-- **Depends on:** None (audit of completed work)
-- **Description:** Create comprehensive operational readiness document that answers: "Is VALOR ready for Tom to use as his daily command system?" Audit and document: startup procedure, health verification, known gaps, day-one workflow, backup/recovery, migration plan (workstation → Proxmox VM), outstanding issues from all completed missions.
-- **Acceptance:** Clear yes/no answer with supporting evidence. If no, documented gap to production with prioritized action items and timeline.
-- **Status:** Review
-- **Updated:** 2026-03-21 13:00Z
-- **Notes:** COMPLETE. Comprehensive readiness audit at `docs/operational-readiness.md`. **Answer: No, not ready yet.** Gap to production: 1-2 weeks (P0 items: Director LLM, NATS systemd, agent-tick deployment, E2E test). Covers all 7 required areas: startup (manual, no automation), health checks (NATS validation scripts), gaps (Director not running, agent-tick not deployed), workflow (current 15-30 min/mission vs. vision 3 min), backup (JetStream persists, no backup strategy), migration (4-7 hour estimate to Proxmox VM), outstanding issues (from VM-002 to VM-016). Priority action items: 4 P0 tasks, 4 P1 tasks, 4 P2 tasks. Recommendation: Focus on P0 first, then migrate to VM.
 
 ---
 
