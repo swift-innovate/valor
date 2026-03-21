@@ -1,5 +1,5 @@
-export { overviewPage } from "./overview.js";
-export { missionsPage } from "./missions.js";
+export { overviewPage } from "./overview-live.js";
+export { missionsPage } from "./missions-live.js";
 export { approvalsPage } from "./approvals.js";
 export { agentsPage } from "./agents.js";
 export { divisionsPage } from "./divisions.js";
