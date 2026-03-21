@@ -1,7 +1,7 @@
 # VALOR Mission Board
 
-Last updated: 2026-03-21T20:00:00Z  
-Updated by: Director (Tom)
+Last updated: 2026-03-21T14:45:00Z  
+Updated by: VALOR/Mira
 
 ---
 
@@ -14,16 +14,6 @@ Updated by: Director (Tom)
 - **Depends on:** None
 - **Description:** Create `docs/nats-subjects.md` documenting the full NATS subject hierarchy for VALOR. Include subject patterns, message payload schemas (TypeScript interfaces), and examples for: mission dispatch, sitreps, comms, system heartbeat, analyst review loop. Reference the Phase 1 plan for architecture context.
 - **Acceptance:** Document is comprehensive enough for Gage to implement the TypeScript client against. All message types have defined interfaces. Subject naming conventions are documented.
-- **Status:** Queued
-- **Updated:** 2026-03-21
-
-### VM-004: Operative Manifest and Roster
-- **Assigned:** Mira
-- **Priority:** P2
-- **Branch:** mission/VM-004
-- **Depends on:** None
-- **Description:** Create `agents/ROSTER.md` with a structured capability manifest for each operative. Include: name, callsign, division, capabilities (tagged list), preferred model tier, tool access level, escalation rules, domain keywords for routing. This manifest feeds the Director's system prompt.
-- **Acceptance:** All 8 operatives documented. Format is human-readable AND parseable (YAML frontmatter per operative section). Tom approves accuracy.
 - **Status:** Queued
 - **Updated:** 2026-03-21
 
@@ -73,6 +63,17 @@ Updated by: Director (Tom)
 ## Review
 
 <!-- Completed work awaiting review/merge -->
+
+### VM-004: Operative Manifest and Roster
+- **Assigned:** Mira
+- **Priority:** P2
+- **Branch:** mission/VM-004
+- **Depends on:** None
+- **Description:** Create `agents/ROSTER.md` with a structured capability manifest for each operative. Include: name, callsign, division, capabilities (tagged list), preferred model tier, tool access level, escalation rules, domain keywords for routing. This manifest feeds the Director's system prompt.
+- **Acceptance:** All 8 operatives documented. Format is human-readable AND parseable (YAML frontmatter per operative section). Tom approves accuracy.
+- **Status:** Review
+- **Updated:** 2026-03-21 15:45Z
+- **Notes:** Complete. All 8 operatives documented with YAML frontmatter format. Safety-critical escalation patterns included for Director hard-coding. Branch pushed to origin.
 
 ---
 
