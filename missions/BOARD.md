@@ -1,7 +1,7 @@
 # VALOR Mission Board
 
-Last updated: 2026-03-21T18:35:00Z
-Updated by: VALOR/Mira
+Last updated: 2026-03-21T18:45:00Z
+Updated by: VALOR/Gage
 
 ---
 
@@ -20,6 +20,20 @@ Updated by: VALOR/Mira
 ---
 
 ## In Progress
+
+---
+
+## Review
+
+### VM-020: Deploy and Start VALOR Services
+- **Assigned:** Gage
+- **Priority:** P0
+- **Branch:** mission/VM-020
+- **Depends on:** VM-002, VM-012, VM-013
+- **Description:** Deploy NATS, Director, and operative consumers as persistent services. Smoke test full pipeline.
+- **Status:** Review
+- **Updated:** 2026-03-21 18:45Z
+- **Notes:** COMPLETE. All services running: NATS (port 4222, JetStream enabled), Director (gemma3:27b via starbase:40114), Eddie consumer, Forge consumer. Smoke test PASSED — full pipeline: inbound → Director classify (ROUTE → forge, confidence 9) → consumer pickup → sitrep → complete. Startup script at `scripts/start-valor.sh`.
 
 ---
 
