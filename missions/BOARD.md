@@ -1,6 +1,6 @@
 # VALOR Mission Board
 
-Last updated: 2026-03-21T17:15:00Z
+Last updated: 2026-03-21T17:45:00Z
 Updated by: VALOR/Gage
 
 ---
@@ -38,6 +38,16 @@ Updated by: VALOR/Gage
 ---
 
 ## Review
+
+### VM-012: Director LLM Integration
+- **Assigned:** Gage
+- **Priority:** P0
+- **Branch:** mission/VM-012
+- **Depends on:** VM-005, VM-006, VM-007, VM-002
+- **Description:** Build the Director's brain: safety gates, LLM adapter (Ollama), classifier (Gear 1/2 with confidence scoring), dispatcher (NATS publish). Full pipeline: mission text → gates → classify → dispatch.
+- **Status:** Review
+- **Updated:** 2026-03-21 17:45Z
+- **Notes:** COMPLETE. 5 files in src/director/. Safety gates: 20/20 test cases from VM-007 spec pass. Classifier: dual-gear with JSON recovery. Dispatcher: ROUTE/DECOMPOSE/ESCALATE → NATS. Config fields added for model selection and confidence threshold.
 
 ### VM-008: Deploy NATS Server and Validate VM-002
 - **Assigned:** Gage
