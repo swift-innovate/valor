@@ -174,7 +174,21 @@ async function handleMission(
     // Execute
     const result = await executeMission(payload);
 
-    // Publish COMPLETE sitrep
+    // Publish COMPLETE sitrep to valor.sitreps.{mission_id} (gateway subscribes here)
+    await publishSitrep(nc, OPERATIVE, {
+      mission_id,
+      operative: OPERATIVE,
+      status: "COMPLETE",
+      progress_pct: 100,
+      summary: result.summary,
+      artifacts: result.artifacts,
+      blockers: [],
+      next_steps: [],
+      tokens_used: null,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Also publish to valor.missions.{operative}.complete (mission lifecycle stream)
     await publishMissionComplete(nc, OPERATIVE, OPERATIVE, {
       mission_id,
       operative: OPERATIVE,

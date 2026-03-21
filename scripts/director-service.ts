@@ -15,6 +15,7 @@ import {
   getNatsConnection,
   closeNatsConnection,
   ensureStreams,
+  publishSitrep,
 } from "../src/nats/index.js";
 import type { VALORMessage } from "../src/nats/index.js";
 import { handleMission } from "../src/director/index.js";
@@ -78,9 +79,28 @@ async function main(): Promise<void> {
           });
         }
       } catch (err) {
-        logger.error("Mission processing failed", {
-          error: err instanceof Error ? err.message : String(err),
-        });
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        logger.error("Mission processing failed", { error: errorMsg });
+
+        // Publish FAILED sitrep so the gateway (and user) sees the error
+        try {
+          await publishSitrep(nc, "director" as any, {
+            mission_id: missionId,
+            operative: "director",
+            status: "FAILED",
+            progress_pct: 0,
+            summary: `Director pipeline failed: ${errorMsg}`,
+            artifacts: [],
+            blockers: [errorMsg],
+            next_steps: ["Retry mission", "Check Ollama health"],
+            tokens_used: null,
+            timestamp: new Date().toISOString(),
+          });
+        } catch (pubErr) {
+          logger.error("Failed to publish error sitrep", {
+            error: pubErr instanceof Error ? pubErr.message : String(pubErr),
+          });
+        }
       }
     },
   });

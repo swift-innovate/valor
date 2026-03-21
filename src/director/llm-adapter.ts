@@ -44,23 +44,39 @@ export async function callOllama(request: LlmRequest): Promise<LlmResponse> {
 
   const startMs = Date.now();
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: request.systemPrompt },
-        { role: "user", content: request.userMessage },
-      ],
-      stream: false,
-      format: "json",
-      options: {
-        temperature: 0.3,
-        num_predict: 2048,
-      },
-    }),
-  });
+  const TIMEOUT_MS = 60_000;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: request.systemPrompt },
+          { role: "user", content: request.userMessage },
+        ],
+        stream: false,
+        format: "json",
+        options: {
+          temperature: 0.3,
+          num_predict: 2048,
+        },
+      }),
+    });
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`Ollama request timed out after ${TIMEOUT_MS}ms (model: ${model})`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!res.ok) {
     const body = await res.text();
