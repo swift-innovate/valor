@@ -1,6 +1,6 @@
 # VALOR Mission Board
 
-Last updated: 2026-03-21T15:20:00Z  
+Last updated: 2026-03-21T15:40:00Z  
 Updated by: VALOR/Mira
 
 ---
@@ -64,6 +64,17 @@ Updated by: VALOR/Mira
 - **Status:** Review
 - **Updated:** 2026-03-21
 - **Deliverable:** `docs/safety-gates.md`
+
+### VM-006: Director System Prompt Assembly
+- **Assigned:** Mira
+- **Priority:** P1
+- **Branch:** mission/VM-006
+- **Depends on:** VM-004 (Roster), VM-005 (Model Selection)
+- **Description:** Draft the Director's complete system prompt for LLM inference. Include: role definition, condensed operative roster, safety gates, standing orders, JSON output format, confidence scoring guidance, model tier selection.
+- **Acceptance:** Token-efficient prompt (<2000 tokens) ready for Gage to wire into VM-012 (Director LLM Integration). All safety gates and standing orders from PHASE-1-NATS.md included.
+- **Status:** Review
+- **Updated:** 2026-03-21 15:40Z
+- **Notes:** COMPLETE. System prompt created at src/director/system-prompt.md. Includes condensed 8-operative roster, 5 safety gate patterns, 6 standing orders, structured JSON output format (ROUTE/DECOMPOSE/ESCALATE), confidence scoring (0-10 scale), model tier guidance, and 3 complete examples. References Gemma3:27B from VM-005. Ready for VM-012 integration.
 
 ---
 
