@@ -230,31 +230,25 @@ overviewPage.get("/", (c) => {
           eventSource.addEventListener('initial-state', (e) => {
             const state = JSON.parse(e.data);
             console.log('[SSE] Initial state received:', state);
-            // Full page reload to update with initial state
-            if (state.missions || state.operatives) {
-              location.reload();
-            }
+            if (state.stats) updateStats(state.stats);
           });
 
           eventSource.addEventListener('mission.updated', (e) => {
             const mission = JSON.parse(e.data);
             console.log('[SSE] Mission updated:', mission);
-            // TODO: Update mission card in DOM without full reload
-            setTimeout(() => location.reload(), 500);
+            updateMissionCard(mission);
           });
 
           eventSource.addEventListener('operative.updated', (e) => {
             const operative = JSON.parse(e.data);
             console.log('[SSE] Operative updated:', operative);
-            // TODO: Update operative card in DOM without full reload
-            setTimeout(() => location.reload(), 500);
+            updateOperativeCard(operative);
           });
 
           eventSource.addEventListener('event.added', (e) => {
             const event = JSON.parse(e.data);
             console.log('[SSE] Event added:', event);
-            // TODO: Prepend event to feed without full reload
-            setTimeout(() => location.reload(), 500);
+            prependEvent(event);
           });
 
           eventSource.addEventListener('ping', (e) => {
@@ -274,6 +268,40 @@ overviewPage.get("/", (c) => {
               console.error('[SSE] Max reconnect attempts reached');
             }
           };
+        }
+
+        function updateStats(stats) {
+          if (!stats) return;
+          const el = document.getElementById('stat-missions');
+          if (el) el.querySelector('.text-2xl').textContent = stats.missions.active;
+          const pending = document.getElementById('stat-pending');
+          if (pending) pending.querySelector('.text-2xl').textContent = stats.missions.pending;
+          const blocked = document.getElementById('stat-blocked');
+          if (blocked) blocked.querySelector('.text-2xl').textContent = stats.missions.blocked;
+        }
+
+        function updateMissionCard(mission) {
+          // Update existing card or ignore — avoids reload loop
+          const card = document.querySelector('[data-mission="' + mission.mission_id + '"]');
+          if (!card) return;
+          const badge = card.querySelector('.rounded-full');
+          if (badge) badge.textContent = mission.status;
+        }
+
+        function updateOperativeCard(operative) {
+          const card = document.querySelector('[data-operative="' + operative.callsign + '"]');
+          if (!card) return;
+          const status = card.querySelector('.font-mono');
+          if (status) status.textContent = operative.status;
+        }
+
+        function prependEvent(event) {
+          const feed = document.getElementById('event-feed');
+          if (!feed) return;
+          const div = document.createElement('div');
+          div.className = 'flex items-start gap-3 py-2 border-b border-gray-800';
+          div.innerHTML = '<span class="text-lg">\\u2022</span><div class="flex-1 min-w-0"><div class="text-sm text-gray-300">' + (event.summary || '') + '</div><div class="text-xs text-gray-600 mt-0.5">' + new Date().toLocaleTimeString() + '</div></div>';
+          feed.prepend(div);
         }
 
         // Start connection

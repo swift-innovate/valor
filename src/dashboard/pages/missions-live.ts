@@ -253,17 +253,23 @@ missionsPage.get("/", (c) => {
           eventSource.addEventListener('mission.updated', (e) => {
             const mission = JSON.parse(e.data);
             console.log('[SSE] Mission updated:', mission);
-            // Reload page to update mission list
-            // TODO: Update DOM directly without full reload
-            setTimeout(() => location.reload(), 500);
+            // Update status badge in existing row
+            const row = document.querySelector('[data-mission="' + mission.mission_id + '"]');
+            if (row) {
+              const badge = row.querySelector('.rounded-full');
+              if (badge) badge.textContent = mission.status;
+            }
           });
 
           eventSource.addEventListener('sitrep.received', (e) => {
             const sitrep = JSON.parse(e.data);
             console.log('[SSE] Sitrep received:', sitrep);
-            // Reload page to update mission list
-            // TODO: Update DOM directly without full reload
-            setTimeout(() => location.reload(), 500);
+            // Update progress in existing row
+            const row = document.querySelector('[data-mission="' + sitrep.mission_id + '"]');
+            if (row) {
+              const bar = row.querySelector('.bg-valor-500');
+              if (bar && sitrep.progress_pct != null) bar.style.width = sitrep.progress_pct + '%';
+            }
           });
 
           eventSource.addEventListener('ping', (e) => {
