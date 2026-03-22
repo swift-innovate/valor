@@ -1,7 +1,7 @@
 # VALOR Mission Board
 
-Last updated: 2026-03-21T18:45:00Z
-Updated by: VALOR/Gage
+Last updated: 2026-03-21T19:30:00Z
+Updated by: VALOR/Mira
 
 ---
 
@@ -24,6 +24,17 @@ Updated by: VALOR/Gage
 ---
 
 ## Review
+
+### VM-022: Director Timeout and Error Handling
+- **Assigned:** Mira
+- **Priority:** P0
+- **Branch:** mission/VM-022
+- **Depends on:** VM-020 (Director service)
+- **Description:** Add timeout handling, error recovery, and status feedback to the Director pipeline. Includes: LLM call timeout (60s default), typed errors, retry logic (once after 30s wait), progress updates to Telegram, startup health check, mission recovery (failed missions remain in JetStream).
+- **Acceptance:** No silent failures. Principal receives clear status updates at every stage: mission received, classifying, waiting, timeout/retry, success/failure. Ollama connectivity verified at startup. Failed missions recoverable via /retry.
+- **Status:** Review
+- **Updated:** 2026-03-21 19:30Z
+- **Notes:** COMPLETE. 5 files changed: errors.ts (new typed errors), llm-adapter.ts (timeout + AbortController), classifier.ts (retry + progress sitreps), index.ts (pass NATS to classifier), director-service.ts (startup health check + 60s retry loop). Error paths: timeout → retry after 30s → fail with clear message; network error → immediate fail with URL; HTTP error → fail with status/body. Progress updates: immediate (received), 10s (waiting), timeout (retrying), success (classified), failure (with recovery instructions). Startup: pings Ollama, verifies model available, warns if down, retries in background. Ready for live testing.
 
 ### VM-020: Deploy and Start VALOR Services
 - **Assigned:** Gage

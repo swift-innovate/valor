@@ -4,17 +4,26 @@
  * Takes inbound mission text, runs safety gates first, then calls the LLM.
  * Parses structured JSON response (ROUTE/DECOMPOSE/ESCALATE).
  * Implements confidence scoring — if below threshold, re-runs on Gear 2.
+ *
+ * Includes timeout handling, retry logic, and progress updates to Telegram.
  */
 
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { NatsConnection } from "@nats-io/nats-core";
 import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
+import { publishSitrep } from "../nats/publishers.js";
 import { evaluateGates } from "./safety-gates.js";
 import type { GateIntercept } from "./safety-gates.js";
 import { callGear1, callGear2 } from "./llm-adapter.js";
 import type { LlmResponse } from "./llm-adapter.js";
+import {
+  LlmTimeoutError,
+  LlmNetworkError,
+  LlmHttpError,
+} from "./errors.js";
 
 // ---------------------------------------------------------------------------
 // Types — Director LLM output schema
@@ -181,16 +190,61 @@ function validateOutput(obj: unknown): DirectorOutput | null {
 }
 
 // ---------------------------------------------------------------------------
+// Progress update helper
+// ---------------------------------------------------------------------------
+
+async function sendProgressUpdate(
+  nc: NatsConnection | null,
+  missionId: string,
+  status: string,
+  summary: string,
+): Promise<void> {
+  if (!nc) return; // No NATS connection (testing mode)
+
+  try {
+    await publishSitrep(nc, "director", {
+      mission_id: missionId,
+      status: status as "ACCEPTED" | "IN_PROGRESS" | "BLOCKED" | "COMPLETE" | "FAILED",
+      summary,
+      progress_pct: undefined,
+      artifacts: [],
+      blockers: undefined,
+      next_steps: undefined,
+    });
+  } catch (err) {
+    logger.error("Failed to send progress update", {
+      mission_id: missionId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main classifier
 // ---------------------------------------------------------------------------
 
 /**
  * Classify a mission. Runs safety gates first, then LLM if gates pass.
  * If Gear 1 confidence is below threshold, escalates to Gear 2.
+ *
+ * Includes timeout handling, retry logic, and progress updates.
+ *
+ * @param missionText - The mission description
+ * @param missionId - Mission identifier for progress updates
+ * @param nc - Optional NATS connection for sending sitreps (null in tests)
  */
 export async function classifyMission(
   missionText: string,
+  missionId?: string,
+  nc?: NatsConnection | null,
 ): Promise<ClassifierResult> {
+  const mid = missionId ?? "unknown";
+
+  // Send initial progress update
+  if (nc) {
+    await sendProgressUpdate(nc, mid, "IN_PROGRESS", "✅ Mission received. Director is classifying...");
+  }
+
   // Step 1: Safety gates (synchronous, no LLM)
   const gateResult = evaluateGates(missionText);
 
@@ -199,6 +253,15 @@ export async function classifyMission(
       gate: gateResult.intercept!.matched_gate,
       intercept_id: gateResult.intercept!.intercept_id,
     });
+
+    if (nc) {
+      await sendProgressUpdate(
+        nc,
+        mid,
+        "BLOCKED",
+        `⚠️ Mission blocked by safety gate: ${gateResult.intercept!.matched_gate}`,
+      );
+    }
 
     return {
       gateIntercepted: true,
@@ -214,8 +277,150 @@ export async function classifyMission(
   const userMessage = `Mission: "${missionText}"`;
 
   logger.info("Gear 1 classification starting", { model: config.directorModel });
-  const gear1Response = await callGear1(systemPrompt, userMessage);
-  const gear1Output = parseDirectorJson(gear1Response.content);
+
+  let gear1Response: LlmResponse | null = null;
+  let gear1Error: Error | null = null;
+
+  try {
+    // Start 10s progress update timer
+    const progressTimer = setTimeout(async () => {
+      if (nc) {
+        await sendProgressUpdate(nc, mid, "IN_PROGRESS", "⏳ Still waiting on LLM response...");
+      }
+    }, 10_000);
+
+    gear1Response = await callGear1(systemPrompt, userMessage);
+    clearTimeout(progressTimer);
+  } catch (error) {
+    gear1Error = error as Error;
+
+    // Handle timeout — retry once after 30s
+    if (error instanceof LlmTimeoutError) {
+      logger.warn("Gear 1 timeout — will retry", {
+        timeout_ms: error.timeoutMs,
+        url: error.url,
+      });
+
+      if (nc) {
+        await sendProgressUpdate(
+          nc,
+          mid,
+          "IN_PROGRESS",
+          "⏳ LLM timeout after 60s. Model may be loading into VRAM. Retrying...",
+        );
+      }
+
+      // Wait 30s before retry (model may be loading)
+      await new Promise((resolve) => setTimeout(resolve, 30_000));
+
+      try {
+        gear1Response = await callGear1(systemPrompt, userMessage);
+        logger.info("Gear 1 retry succeeded");
+      } catch (retryError) {
+        logger.error("Gear 1 retry also failed", {
+          error: retryError instanceof Error ? retryError.message : String(retryError),
+        });
+
+        if (nc) {
+          const errorMsg =
+            retryError instanceof LlmTimeoutError
+              ? "❌ Director LLM failed after 2 timeouts. Mission saved in JetStream. Check Ollama and use /retry."
+              : retryError instanceof LlmNetworkError
+                ? `❌ Cannot reach Ollama at ${retryError.url}. Check CITADEL/starbase.`
+                : `❌ Director LLM error: ${retryError instanceof Error ? retryError.message : String(retryError)}`;
+
+          await sendProgressUpdate(nc, mid, "FAILED", errorMsg);
+        }
+
+        // Return escalation result
+        return {
+          gateIntercepted: false,
+          intercept: null,
+          directorOutput: {
+            decision: "ESCALATE",
+            confidence: 0,
+            reasoning: `LLM call failed: ${retryError instanceof Error ? retryError.message : String(retryError)}`,
+            escalation: {
+              reason: "LLM timeout or network error after retry",
+              safety_gate: "technical",
+              recommended_action: "Check Ollama connectivity and retry mission.",
+            },
+          },
+          gear: 1,
+          rawResponse: null,
+        };
+      }
+    }
+    // Network error — don't retry, escalate immediately
+    else if (error instanceof LlmNetworkError) {
+      logger.error("Gear 1 network error — cannot reach Ollama", {
+        url: error.url,
+        cause: error.cause.message,
+      });
+
+      if (nc) {
+        await sendProgressUpdate(
+          nc,
+          mid,
+          "FAILED",
+          `❌ Cannot reach Ollama at ${error.url}. Check CITADEL/starbase.`,
+        );
+      }
+
+      return {
+        gateIntercepted: false,
+        intercept: null,
+        directorOutput: {
+          decision: "ESCALATE",
+          confidence: 0,
+          reasoning: `Ollama unreachable: ${error.message}`,
+          escalation: {
+            reason: "Network error",
+            safety_gate: "technical",
+            recommended_action: "Verify Ollama is running and accessible.",
+          },
+        },
+        gear: 1,
+        rawResponse: null,
+      };
+    }
+    // HTTP error — escalate
+    else if (error instanceof LlmHttpError) {
+      logger.error("Gear 1 HTTP error", {
+        status: error.status,
+        body: error.body.slice(0, 200),
+      });
+
+      if (nc) {
+        await sendProgressUpdate(
+          nc,
+          mid,
+          "FAILED",
+          `❌ Ollama error (${error.status}): ${error.body.slice(0, 100)}`,
+        );
+      }
+
+      return {
+        gateIntercepted: false,
+        intercept: null,
+        directorOutput: {
+          decision: "ESCALATE",
+          confidence: 0,
+          reasoning: `Ollama HTTP error: ${error.message}`,
+          escalation: {
+            reason: "HTTP error",
+            safety_gate: "technical",
+            recommended_action: "Check Ollama logs.",
+          },
+        },
+        gear: 1,
+        rawResponse: null,
+      };
+    }
+  }
+
+  // Parse Gear 1 response
+  const gear1Output = gear1Response ? parseDirectorJson(gear1Response.content) : null;
 
   if (gear1Output && gear1Output.confidence >= config.directorConfidenceThreshold) {
     logger.info("Gear 1 classification complete", {
@@ -223,6 +428,18 @@ export async function classifyMission(
       confidence: gear1Output.confidence,
       operative: gear1Output.routing?.operative ?? null,
     });
+
+    if (nc) {
+      const operative = gear1Output.routing?.operative ?? "(decomposed)";
+      const summary =
+        gear1Output.decision === "ROUTE"
+          ? `✅ Mission classified: ROUTE → ${operative}`
+          : gear1Output.decision === "DECOMPOSE"
+            ? `✅ Mission decomposed into ${gear1Output.decomposition?.length ?? 0} sub-tasks`
+            : `⚠️ Mission escalated: ${gear1Output.escalation?.reason ?? "unknown"}`;
+
+      await sendProgressUpdate(nc, mid, "COMPLETE", summary);
+    }
 
     return {
       gateIntercepted: false,
@@ -243,6 +460,15 @@ export async function classifyMission(
     model: config.directorGear2Model,
   });
 
+  if (nc) {
+    await sendProgressUpdate(
+      nc,
+      mid,
+      "IN_PROGRESS",
+      "⏳ Low confidence from Gear 1. Escalating to reasoning model...",
+    );
+  }
+
   const gear2Response = await callGear2(systemPrompt, userMessage);
   const gear2Output = parseDirectorJson(gear2Response.content);
 
@@ -252,6 +478,18 @@ export async function classifyMission(
       confidence: gear2Output.confidence,
       operative: gear2Output.routing?.operative ?? null,
     });
+
+    if (nc) {
+      const operative = gear2Output.routing?.operative ?? "(decomposed)";
+      const summary =
+        gear2Output.decision === "ROUTE"
+          ? `✅ Mission classified (Gear 2): ROUTE → ${operative}`
+          : gear2Output.decision === "DECOMPOSE"
+            ? `✅ Mission decomposed (Gear 2) into ${gear2Output.decomposition?.length ?? 0} sub-tasks`
+            : `⚠️ Mission escalated (Gear 2): ${gear2Output.escalation?.reason ?? "unknown"}`;
+
+      await sendProgressUpdate(nc, mid, "COMPLETE", summary);
+    }
 
     return {
       gateIntercepted: false,
@@ -264,6 +502,15 @@ export async function classifyMission(
 
   // Both gears failed to produce valid JSON — escalate to Principal
   logger.error("Both gears failed to produce valid Director output");
+
+  if (nc) {
+    await sendProgressUpdate(
+      nc,
+      mid,
+      "FAILED",
+      "❌ Both gears failed to produce valid JSON. Escalating to Principal for manual routing.",
+    );
+  }
 
   return {
     gateIntercepted: false,

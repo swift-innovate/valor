@@ -1,9 +1,20 @@
+/**
+ * Mission Board — Live (NATS-powered)
+ *
+ * Full mission management: create, view, cancel, retry, reassign,
+ * archive, status filters, operative tabs.
+ *
+ * Mission: VM-025 (enhanced from VM-016)
+ * Operative: Mira
+ */
+
 import { Hono } from "hono";
 import { html } from "hono/html";
 import { layout } from "../layout.js";
 import { natsState } from "../nats-state.js";
 import type { DashboardMission } from "../nats-state.js";
 import { getAuthUser } from "../../auth/index.js";
+import { missionDetailPage } from "./mission-detail.js";
 
 export const missionsPage = new Hono();
 
@@ -24,6 +35,8 @@ const PRIORITY_COLORS: Record<string, string> = {
   P3: "text-gray-500",
 };
 
+const TERMINAL_STATUSES = new Set(["complete", "failed"]);
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function statusBadge(status: DashboardMission["status"]) {
@@ -37,42 +50,65 @@ function formatDate(iso: string): string {
   });
 }
 
+// ── Action buttons per row ───────────────────────────────────────────
+
+function rowActions(m: DashboardMission) {
+  const isTerminal = TERMINAL_STATUSES.has(m.status);
+  const btns: ReturnType<typeof html>[] = [];
+
+  if (!isTerminal) {
+    btns.push(html`<button onclick="cancelMission('${m.mission_id}')"
+      class="px-2 py-1 text-xs font-medium rounded bg-red-900/60 hover:bg-red-800 text-red-300 transition-colors" title="Cancel">✕</button>`);
+  }
+  if (m.status === "failed") {
+    btns.push(html`<button onclick="retryMission('${m.mission_id}')"
+      class="px-2 py-1 text-xs font-medium rounded bg-blue-900/60 hover:bg-blue-800 text-blue-300 transition-colors" title="Retry">↻</button>`);
+  }
+  if (isTerminal) {
+    btns.push(html`<button onclick="archiveMission('${m.mission_id}')"
+      class="px-2 py-1 text-xs font-medium rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors" title="Archive">📦</button>`);
+  }
+
+  return html`<div class="flex items-center gap-1">${btns}</div>`;
+}
+
 // ── Mission row ──────────────────────────────────────────────────────
 
 function missionRow(m: DashboardMission) {
   const priorityClass = PRIORITY_COLORS[m.priority] ?? PRIORITY_COLORS.P2;
 
   return html`
-    <tr class="border-b border-gray-800 hover:bg-gray-800/50 transition-colors" data-mission="${m.mission_id}">
-      <td class="px-4 py-3">
+    <tr class="border-b border-gray-800 hover:bg-gray-800/50 transition-colors cursor-pointer group"
+        data-mission="${m.mission_id}">
+      <td class="px-4 py-3" onclick="window.location='/dashboard/missions/${m.mission_id}'">
         <div class="font-mono text-sm text-valor-400">${m.mission_id}</div>
-        <div class="text-xs text-gray-500 mt-0.5">${formatDate(m.created_at)}</div>
+        <div class="text-xs text-gray-600 mt-0.5">${formatDate(m.created_at)}</div>
       </td>
       
-      <td class="px-4 py-3">
+      <td class="px-4 py-3" onclick="window.location='/dashboard/missions/${m.mission_id}'">
         <div class="font-medium text-gray-200">${m.title}</div>
         ${m.latest_sitrep
           ? html`<div class="text-xs text-gray-500 mt-1 italic line-clamp-2">${m.latest_sitrep}</div>`
           : ""}
       </td>
 
-      <td class="px-4 py-3">
+      <td class="px-4 py-3" onclick="window.location='/dashboard/missions/${m.mission_id}'">
         <span class="text-sm ${priorityClass}">${m.priority}</span>
       </td>
 
-      <td class="px-4 py-3">
+      <td class="px-4 py-3" onclick="window.location='/dashboard/missions/${m.mission_id}'">
         <div class="text-sm text-gray-300">${m.assigned_to}</div>
       </td>
 
-      <td class="px-4 py-3">
+      <td class="px-4 py-3" onclick="window.location='/dashboard/missions/${m.mission_id}'">
         ${statusBadge(m.status)}
       </td>
 
-      <td class="px-4 py-3">
+      <td class="px-4 py-3" onclick="window.location='/dashboard/missions/${m.mission_id}'">
         ${m.progress_pct !== null
           ? html`
               <div class="flex items-center gap-2">
-                <div class="flex-1 bg-gray-800 rounded-full h-2">
+                <div class="flex-1 bg-gray-800 rounded-full h-2 min-w-[60px]">
                   <div class="bg-valor-500 h-2 rounded-full" style="width: ${m.progress_pct}%"></div>
                 </div>
                 <span class="text-xs text-gray-500 w-10 text-right">${m.progress_pct}%</span>
@@ -81,21 +117,21 @@ function missionRow(m: DashboardMission) {
           : html`<span class="text-xs text-gray-600">—</span>`}
       </td>
 
-      <td class="px-4 py-3">
+      <td class="px-4 py-3" onclick="window.location='/dashboard/missions/${m.mission_id}'">
         ${m.blockers.length > 0
-          ? html`
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-900 text-yellow-300">
-                ⚠️ ${m.blockers.length} blocker${m.blockers.length > 1 ? "s" : ""}
-              </span>
-            `
+          ? html`<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-900 text-yellow-300">
+              ⚠️ ${m.blockers.length}
+            </span>`
           : ""}
         ${m.artifacts.length > 0
-          ? html`
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-900 text-blue-300">
-                📎 ${m.artifacts.length}
-              </span>
-            `
+          ? html`<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-900 text-blue-300">
+              📎 ${m.artifacts.length}
+            </span>`
           : ""}
+      </td>
+
+      <td class="px-4 py-3">
+        ${rowActions(m)}
       </td>
     </tr>`;
 }
@@ -105,65 +141,108 @@ function missionRow(m: DashboardMission) {
 missionsPage.get("/", (c) => {
   const statusFilter = c.req.query("status");
   const operativeFilter = c.req.query("operative");
+  const showArchived = c.req.query("archived") === "true";
 
-  let missions = natsState.getMissions({
-    status: statusFilter as any,
-    operative: operativeFilter,
-  });
+  let missions: DashboardMission[];
+  if (showArchived) {
+    missions = natsState.getArchivedMissions();
+  } else {
+    missions = natsState.getMissions({
+      status: statusFilter as any,
+      operative: operativeFilter,
+    });
+  }
 
   const stats = natsState.getStats();
   const operatives = natsState.getOperatives();
+  const archivedCount = natsState.getArchivedMissions().length;
 
   const content = html`
     <div class="fade-in space-y-6">
-      <div class="flex items-center justify-between">
-        <h1 class="text-xl font-bold text-gray-100">Mission Board — Live</h1>
-        <div id="connection-status" class="flex items-center gap-2 text-xs">
-          <span class="w-2 h-2 rounded-full bg-gray-500" id="status-dot"></span>
-          <span id="status-text" class="text-gray-500">Connecting...</span>
+      <!-- Header with actions -->
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div class="flex items-center gap-4">
+          <h1 class="text-xl font-bold text-gray-100">Mission Board — Live</h1>
+          <div id="connection-status" class="flex items-center gap-2 text-xs">
+            <span class="w-2 h-2 rounded-full bg-gray-500" id="status-dot"></span>
+            <span id="status-text" class="text-gray-500">Connecting...</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="toggleCreateModal()"
+            class="px-3 py-1.5 text-sm font-medium rounded-lg bg-valor-700 hover:bg-valor-600 text-white transition-colors">
+            + New Mission
+          </button>
+          ${!showArchived
+            ? html`
+                <button onclick="archiveAllCompleted()"
+                  class="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+                  title="Archive all completed and failed missions">
+                  📦 Clear Completed
+                </button>
+                <button onclick="purgeTestData()"
+                  class="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
+                  title="Remove TEST missions">
+                  🗑️ Purge Tests
+                </button>
+              `
+            : ""}
         </div>
       </div>
 
-      <!-- Stats bar -->
-      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <a href="?status=pending" class="block bg-gray-900 rounded-lg border border-gray-800 p-3 hover:border-valor-500 transition-colors">
+      <!-- Stats bar with clickable filters -->
+      <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
+        <a href="/dashboard/missions" class="block bg-gray-900 rounded-lg border ${!statusFilter && !showArchived ? "border-valor-500" : "border-gray-800"} p-3 hover:border-valor-500 transition-colors">
+          <div class="text-lg font-bold text-gray-200">${stats.missions.total}</div>
+          <div class="text-xs text-gray-500 uppercase">All</div>
+        </a>
+        <a href="?status=pending" class="block bg-gray-900 rounded-lg border ${statusFilter === "pending" ? "border-valor-500" : "border-gray-800"} p-3 hover:border-valor-500 transition-colors">
           <div class="text-lg font-bold text-blue-400" id="stat-pending">${stats.missions.pending}</div>
           <div class="text-xs text-gray-500 uppercase">Pending</div>
         </a>
-        <a href="?status=active" class="block bg-gray-900 rounded-lg border border-gray-800 p-3 hover:border-valor-500 transition-colors">
+        <a href="?status=active" class="block bg-gray-900 rounded-lg border ${statusFilter === "active" ? "border-valor-500" : "border-gray-800"} p-3 hover:border-valor-500 transition-colors">
           <div class="text-lg font-bold text-purple-400" id="stat-active">${stats.missions.active}</div>
           <div class="text-xs text-gray-500 uppercase">Active</div>
         </a>
-        <a href="?status=blocked" class="block bg-gray-900 rounded-lg border border-gray-800 p-3 hover:border-valor-500 transition-colors">
+        <a href="?status=blocked" class="block bg-gray-900 rounded-lg border ${statusFilter === "blocked" ? "border-valor-500" : "border-gray-800"} p-3 hover:border-valor-500 transition-colors">
           <div class="text-lg font-bold text-yellow-400" id="stat-blocked">${stats.missions.blocked}</div>
           <div class="text-xs text-gray-500 uppercase">Blocked</div>
         </a>
-        <a href="?status=complete" class="block bg-gray-900 rounded-lg border border-gray-800 p-3 hover:border-valor-500 transition-colors">
+        <a href="?status=complete" class="block bg-gray-900 rounded-lg border ${statusFilter === "complete" ? "border-valor-500" : "border-gray-800"} p-3 hover:border-valor-500 transition-colors">
           <div class="text-lg font-bold text-green-400" id="stat-complete">${stats.missions.complete}</div>
           <div class="text-xs text-gray-500 uppercase">Complete</div>
         </a>
-        <a href="?status=failed" class="block bg-gray-900 rounded-lg border border-gray-800 p-3 hover:border-valor-500 transition-colors">
+        <a href="?status=failed" class="block bg-gray-900 rounded-lg border ${statusFilter === "failed" ? "border-valor-500" : "border-gray-800"} p-3 hover:border-valor-500 transition-colors">
           <div class="text-lg font-bold text-red-400" id="stat-failed">${stats.missions.failed}</div>
           <div class="text-xs text-gray-500 uppercase">Failed</div>
         </a>
       </div>
 
-      <!-- Filters -->
-      <div class="flex items-center gap-3 flex-wrap">
-        <a href="/dashboard/missions" 
-           class="${!statusFilter && !operativeFilter ? "bg-valor-600" : "bg-gray-800"} px-3 py-1.5 rounded text-xs font-medium hover:bg-valor-700 transition-colors">
-          All Missions
-        </a>
-        ${operatives
-          .filter((op) => op.status !== "OFFLINE")
-          .map(
-            (op) => html`
-              <a href="?operative=${op.callsign}" 
-                 class="${operativeFilter === op.callsign ? "bg-valor-600" : "bg-gray-800"} px-3 py-1.5 rounded text-xs font-medium hover:bg-valor-700 transition-colors">
-                ${op.callsign}
-              </a>
-            `
-          )}
+      <!-- Filters: Operative tabs + Archive toggle -->
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div class="flex items-center gap-2 flex-wrap">
+          <a href="/dashboard/missions" 
+             class="${!operativeFilter && !showArchived ? "bg-valor-600" : "bg-gray-800"} px-3 py-1.5 rounded text-xs font-medium hover:bg-valor-700 transition-colors">
+            All Missions
+          </a>
+          ${operatives
+            .filter((op) => op.status !== "OFFLINE")
+            .map(
+              (op) => html`
+                <a href="?operative=${op.callsign}" 
+                   class="${operativeFilter === op.callsign ? "bg-valor-600" : "bg-gray-800"} px-3 py-1.5 rounded text-xs font-medium hover:bg-valor-700 transition-colors">
+                  ${op.callsign}
+                  ${op.status === "BUSY" ? html`<span class="ml-1 w-1.5 h-1.5 rounded-full bg-yellow-400 inline-block"></span>` : ""}
+                </a>
+              `
+            )}
+        </div>
+        <div class="flex items-center gap-2">
+          <a href="${showArchived ? "/dashboard/missions" : "?archived=true"}"
+             class="${showArchived ? "bg-valor-600" : "bg-gray-800"} px-3 py-1.5 rounded text-xs font-medium hover:bg-valor-700 transition-colors">
+            ${showArchived ? "← Active" : "📦 Archived"} ${archivedCount > 0 ? `(${archivedCount})` : ""}
+          </a>
+        </div>
       </div>
 
       <!-- Mission table -->
@@ -172,35 +251,24 @@ missionsPage.get("/", (c) => {
           <table class="min-w-full divide-y divide-gray-800">
             <thead class="bg-gray-800/50">
               <tr>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Mission ID
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Title
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Priority
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Operative
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Status
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Progress
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Notes
-                </th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Mission ID</th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Title</th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Priority</th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Operative</th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Progress</th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Notes</th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody id="missions-tbody" class="bg-gray-900 divide-y divide-gray-800">
               ${missions.length === 0
                 ? html`
                     <tr>
-                      <td colspan="7" class="px-4 py-8 text-center text-gray-500 text-sm">
-                        No missions found${statusFilter ? ` with status "${statusFilter}"` : ""}${operativeFilter ? ` assigned to ${operativeFilter}` : ""}.
+                      <td colspan="8" class="px-4 py-8 text-center text-gray-500 text-sm">
+                        ${showArchived
+                          ? "No archived missions."
+                          : html`No missions found${statusFilter ? ` with status "${statusFilter}"` : ""}${operativeFilter ? ` assigned to ${operativeFilter}` : ""}.`}
                       </td>
                     </tr>
                   `
@@ -211,106 +279,259 @@ missionsPage.get("/", (c) => {
       </div>
     </div>
 
-    <!-- SSE Client Script -->
+    <!-- Create Mission Modal -->
+    <div id="create-modal" class="fixed inset-0 z-50 hidden">
+      <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="toggleCreateModal()"></div>
+      <div class="absolute inset-4 sm:inset-auto sm:top-[10%] sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-2xl bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-auto max-h-[80vh]">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+          <h2 class="text-lg font-bold text-gray-100">Create Mission</h2>
+          <button onclick="toggleCreateModal()" class="text-gray-500 hover:text-white text-xl">&times;</button>
+        </div>
+        <div class="p-6 space-y-4">
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Title <span class="text-red-400">*</span></label>
+            <input id="c-title" type="text" placeholder="Mission title"
+              class="w-full bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-valor-500">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Description <span class="text-red-400">*</span></label>
+            <textarea id="c-description" rows="4" placeholder="Full mission description (markdown supported)"
+              class="w-full bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-valor-500 resize-none font-mono"></textarea>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">Priority</label>
+              <select id="c-priority"
+                class="w-full bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-valor-500">
+                <option value="P2">P2 — Normal</option>
+                <option value="P0">P0 — Critical</option>
+                <option value="P1">P1 — High</option>
+                <option value="P3">P3 — Low</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">Assign To</label>
+              <select id="c-operative"
+                class="w-full bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-valor-500">
+                <option value="Director">Director (auto-route)</option>
+                ${operatives.map(
+                  (op) => html`<option value="${op.callsign}">${op.callsign} ${op.status !== "OFFLINE" ? `(${op.status})` : "(offline)"}</option>`
+                )}
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">Model Tier</label>
+              <select id="c-model-tier"
+                class="w-full bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-valor-500">
+                <option value="balanced">Balanced</option>
+                <option value="local">Local (free)</option>
+                <option value="efficient">Efficient</option>
+                <option value="frontier">Frontier</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">Deadline <span class="text-gray-600">(optional)</span></label>
+              <input id="c-deadline" type="datetime-local"
+                class="w-full bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-valor-500">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Acceptance Criteria <span class="text-gray-600">(one per line)</span></label>
+            <textarea id="c-criteria" rows="3" placeholder="All tests pass&#10;No regressions&#10;Code review approved"
+              class="w-full bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-valor-500 resize-none"></textarea>
+          </div>
+          <div class="flex items-center justify-end gap-3 pt-2">
+            <button onclick="toggleCreateModal()" class="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+            <button onclick="createMission()" id="create-btn"
+              class="px-4 py-2 text-sm font-medium rounded-lg bg-valor-700 hover:bg-valor-600 text-white transition-colors">
+              Create Mission
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scripts -->
     <script>
+      // ── Create modal ───────────────────────────────────────────────
+      function toggleCreateModal() {
+        document.getElementById('create-modal').classList.toggle('hidden');
+      }
+
+      function lines(id) {
+        return document.getElementById(id).value.split('\\n').map(function(s) { return s.trim(); }).filter(Boolean);
+      }
+
+      async function createMission() {
+        var title = document.getElementById('c-title').value.trim();
+        var description = document.getElementById('c-description').value.trim();
+        if (!title || !description) { showToast('Title and description are required', 'error'); return; }
+
+        var btn = document.getElementById('create-btn');
+        btn.disabled = true;
+        btn.textContent = 'Creating...';
+
+        try {
+          var body = {
+            title: title,
+            description: description,
+            priority: document.getElementById('c-priority').value,
+            assigned_to: document.getElementById('c-operative').value,
+            model_tier: document.getElementById('c-model-tier').value,
+            deadline: document.getElementById('c-deadline').value || null,
+            acceptance_criteria: lines('c-criteria'),
+          };
+
+          var res = await fetch('/api/missions-live', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          if (res.ok) {
+            showToast('Mission created!', 'success');
+            toggleCreateModal();
+            setTimeout(function() { location.reload(); }, 500);
+          } else {
+            var d = await res.json();
+            showToast(d.error || 'Create failed', 'error');
+          }
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Create Mission';
+        }
+      }
+
+      // ── Mission actions ────────────────────────────────────────────
+      async function cancelMission(id) {
+        if (!confirm('Cancel mission ' + id + '? This cannot be undone.')) return;
+        var res = await fetch('/api/missions-live/' + id + '/cancel', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+        });
+        if (res.ok) { showToast('Mission cancelled', 'success'); setTimeout(function(){ location.reload(); }, 500); }
+        else { var d = await res.json(); showToast(d.error || 'Cancel failed', 'error'); }
+      }
+
+      async function retryMission(id) {
+        if (!confirm('Retry mission ' + id + '?')) return;
+        var res = await fetch('/api/missions-live/' + id + '/retry', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+        });
+        if (res.ok) { showToast('Mission queued for retry', 'success'); setTimeout(function(){ location.reload(); }, 500); }
+        else { var d = await res.json(); showToast(d.error || 'Retry failed', 'error'); }
+      }
+
+      async function archiveMission(id) {
+        if (!confirm('Archive mission ' + id + '?')) return;
+        var res = await fetch('/api/missions-live/' + id + '/archive', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+        });
+        if (res.ok) { showToast('Mission archived', 'success'); setTimeout(function(){ location.reload(); }, 500); }
+        else { var d = await res.json(); showToast(d.error || 'Archive failed', 'error'); }
+      }
+
+      async function archiveAllCompleted() {
+        if (!confirm('Archive ALL completed and failed missions?')) return;
+        var res = await fetch('/api/missions-live/archive-completed', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+        });
+        if (res.ok) { var d = await res.json(); showToast('Archived ' + d.count + ' missions', 'success'); setTimeout(function(){ location.reload(); }, 500); }
+        else { var d = await res.json(); showToast(d.error || 'Archive failed', 'error'); }
+      }
+
+      async function purgeTestData() {
+        if (!confirm('Purge all TEST missions? This removes them permanently from the board.')) return;
+        var res = await fetch('/api/missions-live/purge-tests', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+        });
+        if (res.ok) { var d = await res.json(); showToast('Purged ' + d.count + ' test missions', 'success'); setTimeout(function(){ location.reload(); }, 500); }
+        else { var d = await res.json(); showToast(d.error || 'Purge failed', 'error'); }
+      }
+
+      // ── SSE Client ─────────────────────────────────────────────────
       (function() {
-        let eventSource = null;
-        let reconnectAttempts = 0;
-        const maxReconnectAttempts = 5;
-        const reconnectDelay = 2000;
+        var eventSource = null;
+        var reconnectAttempts = 0;
+        var maxReconnectAttempts = 5;
+        var reconnectDelay = 2000;
 
         function updateConnectionStatus(connected) {
-          const dot = document.getElementById('status-dot');
-          const text = document.getElementById('status-text');
+          var dot = document.getElementById('status-dot');
+          var text = document.getElementById('status-text');
           if (connected) {
             dot.className = 'w-2 h-2 rounded-full bg-green-500';
             text.textContent = 'Connected';
-            text.className = 'text-green-500';
+            text.className = 'text-green-500 text-xs';
           } else {
             dot.className = 'w-2 h-2 rounded-full bg-red-500';
             text.textContent = 'Disconnected';
-            text.className = 'text-red-500';
+            text.className = 'text-red-500 text-xs';
           }
         }
 
         function connect() {
-          console.log('[SSE] Connecting to dashboard/sse...');
           eventSource = new EventSource('/dashboard/sse');
 
-          eventSource.addEventListener('connected', (e) => {
-            console.log('[SSE] Connected:', e.data);
+          eventSource.addEventListener('connected', function() {
             updateConnectionStatus(true);
             reconnectAttempts = 0;
           });
 
-          eventSource.addEventListener('initial-state', (e) => {
-            const state = JSON.parse(e.data);
-            console.log('[SSE] Initial state received:', state);
-            // Update stats
+          eventSource.addEventListener('initial-state', function(e) {
+            var state = JSON.parse(e.data);
             updateStats(state.stats);
           });
 
-          eventSource.addEventListener('mission.updated', (e) => {
-            const mission = JSON.parse(e.data);
-            console.log('[SSE] Mission updated:', mission);
-            // Update status badge in existing row
-            const row = document.querySelector('[data-mission="' + mission.mission_id + '"]');
-            if (row) {
-              const badge = row.querySelector('.rounded-full');
-              if (badge) badge.textContent = mission.status;
-            }
+          eventSource.addEventListener('mission.updated', function() {
+            setTimeout(function() { location.reload(); }, 500);
           });
 
-          eventSource.addEventListener('sitrep.received', (e) => {
-            const sitrep = JSON.parse(e.data);
-            console.log('[SSE] Sitrep received:', sitrep);
-            // Update progress in existing row
-            const row = document.querySelector('[data-mission="' + sitrep.mission_id + '"]');
-            if (row) {
-              const bar = row.querySelector('.bg-valor-500');
-              if (bar && sitrep.progress_pct != null) bar.style.width = sitrep.progress_pct + '%';
-            }
+          eventSource.addEventListener('sitrep.received', function() {
+            setTimeout(function() { location.reload(); }, 500);
           });
 
-          eventSource.addEventListener('ping', (e) => {
-            // Silent ping to keep connection alive
+          eventSource.addEventListener('mission.archived', function() {
+            setTimeout(function() { location.reload(); }, 500);
           });
 
-          eventSource.onerror = (err) => {
-            console.error('[SSE] Connection error:', err);
+          eventSource.addEventListener('missions.archived', function() {
+            setTimeout(function() { location.reload(); }, 500);
+          });
+
+          eventSource.addEventListener('missions.purged', function() {
+            setTimeout(function() { location.reload(); }, 500);
+          });
+
+          eventSource.addEventListener('ping', function() {});
+
+          eventSource.onerror = function() {
             updateConnectionStatus(false);
             eventSource.close();
-
             if (reconnectAttempts < maxReconnectAttempts) {
               reconnectAttempts++;
-              console.log(\`[SSE] Reconnecting (attempt \${reconnectAttempts}/\${maxReconnectAttempts})...\`);
               setTimeout(connect, reconnectDelay * reconnectAttempts);
-            } else {
-              console.error('[SSE] Max reconnect attempts reached');
             }
           };
         }
 
         function updateStats(stats) {
           if (!stats) return;
-          document.getElementById('stat-pending').textContent = stats.missions.pending;
-          document.getElementById('stat-active').textContent = stats.missions.active;
-          document.getElementById('stat-blocked').textContent = stats.missions.blocked;
-          document.getElementById('stat-complete').textContent = stats.missions.complete;
-          document.getElementById('stat-failed').textContent = stats.missions.failed;
+          var el;
+          el = document.getElementById('stat-pending'); if (el) el.textContent = stats.missions.pending;
+          el = document.getElementById('stat-active'); if (el) el.textContent = stats.missions.active;
+          el = document.getElementById('stat-blocked'); if (el) el.textContent = stats.missions.blocked;
+          el = document.getElementById('stat-complete'); if (el) el.textContent = stats.missions.complete;
+          el = document.getElementById('stat-failed'); if (el) el.textContent = stats.missions.failed;
         }
 
-        // Start connection
         connect();
-
-        // Clean up on page unload
-        window.addEventListener('beforeunload', () => {
-          if (eventSource) {
-            eventSource.close();
-          }
-        });
+        window.addEventListener('beforeunload', function() { if (eventSource) eventSource.close(); });
       })();
     </script>`;
 
   return c.html(layout("Missions", "/dashboard/missions", content, getAuthUser(c)));
 });
+
+// Mount detail view — handles /dashboard/missions/:id
+missionsPage.route("/", missionDetailPage);
