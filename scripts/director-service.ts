@@ -108,7 +108,7 @@ async function main(): Promise<void> {
 
   logger.info("Director service ready", {
     listening: "valor.missions.inbound",
-    ollama: process.env.OLLAMA_BASE_URL ?? "http://localhost:11434",
+    ollama: process.env.OLLAMA_BASE_URL ?? "http://starbase:40114",
     model: process.env.DIRECTOR_MODEL ?? "gemma3:27b",
   });
 

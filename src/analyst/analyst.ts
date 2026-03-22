@@ -55,7 +55,7 @@ const { values: args } = parseArgs({
   options: {
     nats: { type: "string", default: "nats://localhost:4222" },
     model: { type: "string", default: "qwen3:latest" },
-    ollama: { type: "string", default: "http://localhost:11434" },
+    ollama: { type: "string", default: "http://starbase:40114" },
     "heartbeat-interval": { type: "string", default: "30000" },
   },
   allowPositionals: false,
@@ -63,7 +63,7 @@ const { values: args } = parseArgs({
 
 const NATS_URL = args.nats ?? "nats://localhost:4222";
 const DEFAULT_MODEL = args.model ?? "qwen3:latest";
-const OLLAMA_BASE_URL = args.ollama ?? "http://localhost:11434";
+const OLLAMA_BASE_URL = args.ollama ?? "http://starbase:40114";
 const HEARTBEAT_INTERVAL_MS = parseInt(args["heartbeat-interval"] ?? "30000", 10);
 const ANALYST_CALLSIGN = "analyst";
 

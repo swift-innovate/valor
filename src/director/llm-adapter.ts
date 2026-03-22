@@ -29,7 +29,7 @@ export interface LlmResponse {
 // Ollama HTTP client
 // ---------------------------------------------------------------------------
 
-const DEFAULT_OLLAMA_URL = "http://localhost:11434";
+const DEFAULT_OLLAMA_URL = "http://starbase:40114";
 
 /**
  * Call Ollama's /api/chat endpoint with the given prompt.
