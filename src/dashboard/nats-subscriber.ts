@@ -14,12 +14,12 @@ import { jetstream, DeliverPolicy } from "@nats-io/jetstream";
 import type {
   VALORMessage,
   MissionBrief,
-  Sitrep,
   SystemEvent,
   Heartbeat,
   ReviewVerdict,
   CommsMessage,
 } from "../types/nats.js";
+import type { NatsSitrep } from "../nats/index.js";
 import { STREAM_NAMES } from "../nats/types.js";
 import { natsState } from "./nats-state.js";
 
@@ -95,7 +95,7 @@ export class NATSSubscriber {
         try {
           const envelope = JSON.parse(
             new TextDecoder().decode(msg.data),
-          ) as VALORMessage<Sitrep>;
+          ) as VALORMessage<NatsSitrep>;
           natsState.handleSitrep(envelope);
           count++;
         } catch {
@@ -143,7 +143,7 @@ export class NATSSubscriber {
       callback: (_err, msg) => {
         if (_err) return;
         try {
-          natsState.handleSitrep(decode<Sitrep>(msg));
+          natsState.handleSitrep(decode<NatsSitrep>(msg));
         } catch (err) {
           console.error("[NATSSubscriber] Error processing sitrep:", err);
         }

@@ -204,12 +204,15 @@ async function sendProgressUpdate(
   try {
     await publishSitrep(nc, "director", {
       mission_id: missionId,
+      operative: "director",
       status: status as "ACCEPTED" | "IN_PROGRESS" | "BLOCKED" | "COMPLETE" | "FAILED",
       summary,
-      progress_pct: undefined,
+      progress_pct: 0,
       artifacts: [],
-      blockers: undefined,
-      next_steps: undefined,
+      blockers: [],
+      next_steps: [],
+      tokens_used: null,
+      timestamp: new Date().toISOString(),
     });
   } catch (err) {
     logger.error("Failed to send progress update", {

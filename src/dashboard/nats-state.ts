@@ -17,6 +17,7 @@ import type {
   ReviewVerdict,
   CommsMessage,
 } from "../types/nats.js";
+import type { NatsSitrep } from "../nats/index.js";
 
 /**
  * Mission state maintained from NATS subscriptions
@@ -189,7 +190,7 @@ class NATSStateManager {
   /**
    * Handle incoming Sitrep (mission progress update)
    */
-  handleSitrep(msg: VALORMessage<Sitrep>): void {
+  handleSitrep(msg: VALORMessage<NatsSitrep>): void {
     const sitrep = msg.payload;
     let mission = this.missions.get(sitrep.mission_id);
 
@@ -235,11 +236,12 @@ class NATSStateManager {
       mission.progress_pct = sitrep.progress_pct;
     }
 
-    if (sitrep.artifacts) {
-      mission.artifacts = sitrep.artifacts;
+    if (sitrep.artifacts && sitrep.artifacts.length > 0) {
+      // Convert SitrepArtifact[] to string[] for dashboard display
+      mission.artifacts = sitrep.artifacts.map(a => `${a.label} (${a.type}): ${a.ref}`);
     }
 
-    if (sitrep.blockers) {
+    if (sitrep.blockers && sitrep.blockers.length > 0) {
       mission.blockers = sitrep.blockers;
     }
 
@@ -254,8 +256,8 @@ class NATSStateManager {
       status: sitrep.status,
       summary: sitrep.summary,
       progress_pct: sitrep.progress_pct ?? null,
-      artifacts: sitrep.artifacts ?? [],
-      blockers: sitrep.blockers ?? [],
+      artifacts: sitrep.artifacts.map(a => `${a.label} (${a.type}): ${a.ref}`),
+      blockers: sitrep.blockers,
     });
 
     this.addEvent({
