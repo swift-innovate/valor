@@ -10,6 +10,7 @@
 
 import { getNatsConnection, closeNatsConnection } from "../nats/index.js";
 import type { NatsConnection, Subscription, Msg } from "@nats-io/nats-core";
+import { jetstream, DeliverPolicy } from "@nats-io/jetstream";
 import type {
   VALORMessage,
   MissionBrief,
@@ -19,6 +20,7 @@ import type {
   ReviewVerdict,
   CommsMessage,
 } from "../types/nats.js";
+import { STREAM_NAMES } from "../nats/types.js";
 import { natsState } from "./nats-state.js";
 
 function decode<T>(msg: Msg): VALORMessage<T> {
@@ -51,7 +53,10 @@ export class NATSSubscriber {
       this.connected = true;
       console.log("[NATSSubscriber] Connected to NATS");
 
-      // Start all subscriptions
+      // Hydrate state from JetStream history before subscribing to live
+      await this.hydrateFromJetStream();
+
+      // Start all subscriptions for live updates
       this.subscribeMissions();
       this.subscribeSitreps();
       this.subscribeHeartbeats();
@@ -64,6 +69,47 @@ export class NATSSubscriber {
       console.error("[NATSSubscriber] Connection failed:", err);
       this.connected = false;
       throw err;
+    }
+  }
+
+  /**
+   * Replay SITREPS stream from JetStream to hydrate dashboard state
+   * with missions that were dispatched before the dashboard started.
+   * Uses an ordered consumer (ephemeral, auto-cleaned) to replay all messages.
+   */
+  private async hydrateFromJetStream(): Promise<void> {
+    if (!this.nc) return;
+
+    try {
+      const js = jetstream(this.nc);
+
+      // Ordered consumer — ephemeral, replays from beginning, no ack needed
+      const consumer = await js.consumers.get(STREAM_NAMES.SITREPS, {
+        deliver_policy: DeliverPolicy.All,
+      });
+
+      let count = 0;
+      const iter = await consumer.fetch({ max_messages: 1000, expires: 3000 });
+
+      for await (const msg of iter) {
+        try {
+          const envelope = JSON.parse(
+            new TextDecoder().decode(msg.data),
+          ) as VALORMessage<Sitrep>;
+          natsState.handleSitrep(envelope);
+          count++;
+        } catch {
+          // Skip unparseable messages
+        }
+      }
+
+      console.log(`[NATSSubscriber] Hydrated ${count} sitreps from JetStream`);
+    } catch (err) {
+      // Non-fatal — dashboard just won't have history
+      console.warn(
+        "[NATSSubscriber] JetStream hydration failed (dashboard will only show new missions):",
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 

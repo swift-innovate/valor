@@ -175,11 +175,27 @@ class NATSStateManager {
    */
   handleSitrep(msg: VALORMessage<Sitrep>): void {
     const sitrep = msg.payload;
-    const mission = this.missions.get(sitrep.mission_id);
-    
+    let mission = this.missions.get(sitrep.mission_id);
+
     if (!mission) {
-      console.warn(`[NATSState] Sitrep for unknown mission: ${sitrep.mission_id}`);
-      return;
+      // Create stub mission from sitrep (happens during hydration or if
+      // the dashboard missed the original MissionBrief)
+      mission = {
+        mission_id: sitrep.mission_id,
+        title: sitrep.mission_id,
+        description: "",
+        priority: "P2",
+        assigned_to: sitrep.operative ?? "unknown",
+        status: "pending",
+        progress_pct: null,
+        created_at: msg.timestamp,
+        started_at: null,
+        completed_at: null,
+        artifacts: [],
+        blockers: [],
+        latest_sitrep: null,
+      };
+      this.missions.set(sitrep.mission_id, mission);
     }
 
     // Update mission state from sitrep
