@@ -1,5 +1,6 @@
 export { overviewPage } from "./overview-live.js";
 export { missionsPage } from "./missions-live.js";
+export { missionDetailPage } from "./mission-detail.js";
 export { approvalsPage } from "./approvals.js";
 export { agentsPage } from "./agents.js";
 export { divisionsPage } from "./divisions.js";

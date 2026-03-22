@@ -84,15 +84,31 @@ export interface DashboardComms {
 }
 
 /**
+ * Sitrep history entry
+ */
+export interface DashboardSitrep {
+  timestamp: string;
+  status: string;
+  summary: string;
+  progress_pct: number | null;
+  artifacts: string[];
+  blockers: string[];
+}
+
+/**
  * In-memory state maintained from NATS subscriptions
  */
 class NATSStateManager {
   // State maps
   private missions: Map<string, DashboardMission> = new Map();
+  private archivedMissions: Map<string, DashboardMission> = new Map();
   private operatives: Map<string, DashboardOperative> = new Map();
   private events: DashboardEvent[] = [];
   private verdicts: DashboardVerdict[] = [];
   private comms: DashboardComms[] = [];
+
+  // Sitrep history per mission
+  private sitrepHistory: Map<string, DashboardSitrep[]> = new Map();
   
   // Heartbeat timeout tracking
   private heartbeatTimeouts: Map<string, NodeJS.Timeout> = new Map();
@@ -212,6 +228,19 @@ class NATSStateManager {
     }
 
     mission.latest_sitrep = sitrep.summary;
+
+    // Track sitrep history
+    if (!this.sitrepHistory.has(sitrep.mission_id)) {
+      this.sitrepHistory.set(sitrep.mission_id, []);
+    }
+    this.sitrepHistory.get(sitrep.mission_id)!.push({
+      timestamp: msg.timestamp,
+      status: sitrep.status,
+      summary: sitrep.summary,
+      progress_pct: sitrep.progress_pct ?? null,
+      artifacts: sitrep.artifacts ?? [],
+      blockers: sitrep.blockers ?? [],
+    });
 
     this.addEvent({
       id: msg.id,
@@ -479,10 +508,113 @@ class NATSStateManager {
   }
 
   /**
+   * Get sitrep history for a mission
+   */
+  getSitrepHistory(mission_id: string): DashboardSitrep[] {
+    return this.sitrepHistory.get(mission_id) ?? [];
+  }
+
+  /**
+   * Archive a mission — move from active to archived
+   */
+  archiveMission(mission_id: string): boolean {
+    const mission = this.missions.get(mission_id);
+    if (!mission) return false;
+    this.archivedMissions.set(mission_id, mission);
+    this.missions.delete(mission_id);
+    this.emit("mission.archived", mission);
+    return true;
+  }
+
+  /**
+   * Archive all completed/failed missions
+   */
+  archiveCompleted(): number {
+    let count = 0;
+    for (const [id, m] of this.missions) {
+      if (m.status === "complete" || m.status === "failed") {
+        this.archivedMissions.set(id, m);
+        this.missions.delete(id);
+        count++;
+      }
+    }
+    if (count > 0) {
+      this.emit("missions.archived", { count });
+    }
+    return count;
+  }
+
+  /**
+   * Get archived missions
+   */
+  getArchivedMissions(): DashboardMission[] {
+    return Array.from(this.archivedMissions.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }
+
+  /**
+   * Update mission status directly (for cancel/retry/reassign)
+   */
+  updateMissionStatus(mission_id: string, status: DashboardMission["status"]): boolean {
+    const mission = this.missions.get(mission_id);
+    if (!mission) return false;
+    mission.status = status;
+    this.emit("mission.updated", mission);
+    return true;
+  }
+
+  /**
+   * Reassign a mission to a new operative
+   */
+  reassignMission(mission_id: string, new_operative: string): boolean {
+    const mission = this.missions.get(mission_id);
+    if (!mission) return false;
+    const old_operative = mission.assigned_to;
+    mission.assigned_to = new_operative;
+    mission.status = "pending";
+    mission.progress_pct = null;
+    this.emit("mission.updated", mission);
+    return true;
+  }
+
+  /**
+   * Reset mission for retry (failed → pending)
+   */
+  retryMission(mission_id: string): boolean {
+    const mission = this.missions.get(mission_id);
+    if (!mission || mission.status !== "failed") return false;
+    mission.status = "pending";
+    mission.progress_pct = null;
+    mission.completed_at = null;
+    this.emit("mission.updated", mission);
+    return true;
+  }
+
+  /**
+   * Purge test missions (IDs containing "TEST")
+   */
+  purgeTestMissions(): number {
+    let count = 0;
+    for (const [id] of this.missions) {
+      if (id.includes("TEST")) {
+        this.missions.delete(id);
+        count++;
+      }
+    }
+    if (count > 0) {
+      this.emit("missions.purged", { count });
+    }
+    return count;
+  }
+
+  /**
    * Clear all state (for testing)
    */
   clear(): void {
     this.missions.clear();
+    this.archivedMissions.clear();
+    this.sitrepHistory.clear();
     this.events.length = 0;
     this.verdicts.length = 0;
     this.comms.length = 0;
