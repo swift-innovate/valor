@@ -84,7 +84,9 @@ sseRoutes.get("/", (c) => {
       console.log("[SSE] Client disconnected");
     });
 
-    // Keep the stream open
-    await stream.sleep(Number.MAX_SAFE_INTEGER);
+    // Keep the stream open — use a promise that never resolves.
+    // stream.sleep(Number.MAX_SAFE_INTEGER) overflows a 32-bit int
+    // and resolves in 1ms, killing the connection instantly.
+    await new Promise<void>(() => {});
   });
 });
