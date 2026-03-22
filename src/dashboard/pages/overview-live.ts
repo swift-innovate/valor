@@ -165,7 +165,7 @@ overviewPage.get("/", (c) => {
           <h2 class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">Fleet Status</h2>
           <div id="operatives-grid" class="grid gap-3">
             ${operatives.length === 0
-              ? html`<p class="text-gray-500 text-sm">No operatives online.</p>`
+              ? html`<p class="text-gray-500 text-sm">No operatives online. Agents will appear when they connect.</p>`
               : operatives.map(operativeCard)}
           </div>
         </div>
