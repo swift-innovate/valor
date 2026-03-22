@@ -24,6 +24,10 @@ import {
   LlmNetworkError,
   LlmHttpError,
 } from "./errors.js";
+import {
+  getValidOperativeCallsigns,
+  buildRosterPromptSection,
+} from "./roster.js";
 
 // ---------------------------------------------------------------------------
 // Types — Director LLM output schema
@@ -79,22 +83,28 @@ export interface ClassifierResult {
 // System prompt loader
 // ---------------------------------------------------------------------------
 
-let _systemPrompt: string | null = null;
+let _systemPromptTemplate: string | null = null;
 
+/**
+ * Build the Director system prompt with the live operative roster.
+ * The template is cached but the roster is injected fresh each time.
+ */
 function loadSystemPrompt(): string {
-  if (_systemPrompt) return _systemPrompt;
+  if (!_systemPromptTemplate) {
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const promptPath = resolve(__dirname, "system-prompt.md");
 
-  const __dirname = dirname(fileURLToPath(import.meta.url));
-  const promptPath = resolve(__dirname, "system-prompt.md");
-
-  try {
-    _systemPrompt = readFileSync(promptPath, "utf-8");
-  } catch {
-    logger.error("Failed to load Director system prompt", { path: promptPath });
-    throw new Error(`Director system prompt not found at ${promptPath}`);
+    try {
+      _systemPromptTemplate = readFileSync(promptPath, "utf-8");
+    } catch {
+      logger.error("Failed to load Director system prompt", { path: promptPath });
+      throw new Error(`Director system prompt not found at ${promptPath}`);
+    }
   }
 
-  return _systemPrompt;
+  // Inject live roster into template
+  const roster = buildRosterPromptSection();
+  return _systemPromptTemplate.replace("{{OPERATIVE_ROSTER}}", roster);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,9 +143,6 @@ function parseDirectorJson(raw: string): DirectorOutput | null {
 }
 
 const VALID_DECISIONS = new Set(["ROUTE", "DECOMPOSE", "ESCALATE"]);
-const VALID_OPERATIVES = new Set([
-  "mira", "eddie", "forge", "gage", "zeke", "rook", "herbie", "paladin",
-]);
 
 function validateOutput(obj: unknown): DirectorOutput | null {
   if (!obj || typeof obj !== "object") return null;
@@ -152,13 +159,29 @@ function validateOutput(obj: unknown): DirectorOutput | null {
     reasoning: o.reasoning,
   };
 
+  // Dynamic operative validation — only registered agents are valid
+  const validOperatives = getValidOperativeCallsigns();
+
   if (o.decision === "ROUTE" && o.routing && typeof o.routing === "object") {
     const r = o.routing as Record<string, unknown>;
-    if (VALID_OPERATIVES.has(r.operative as string)) {
+    const operative = r.operative as string;
+    if (validOperatives.has(operative)) {
       result.routing = {
-        operative: r.operative as string,
+        operative,
         model_tier: (r.model_tier as RoutingInfo["model_tier"]) ?? "balanced",
         priority: (r.priority as RoutingInfo["priority"]) ?? "P2",
+      };
+    } else {
+      // LLM routed to unregistered operative — force escalation
+      logger.warn("LLM routed to unregistered operative, forcing ESCALATE", {
+        operative,
+        registered: Array.from(validOperatives),
+      });
+      result.decision = "ESCALATE";
+      result.escalation = {
+        reason: `Best fit "${operative}" is not registered. Available: ${Array.from(validOperatives).join(", ") || "none"}`,
+        safety_gate: "uncertain",
+        recommended_action: "Reassign to an available operative or bring the target agent online.",
       };
     }
   }

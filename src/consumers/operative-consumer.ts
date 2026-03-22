@@ -34,6 +34,7 @@ import type {
 } from "../nats/index.js";
 import type { ConsumerMessages } from "@nats-io/jetstream";
 import { logger } from "../utils/logger.js";
+import { isOperativeRegistered } from "../director/roster.js";
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -317,6 +318,27 @@ async function main(): Promise<void> {
     nats: NATS_URL,
     heartbeat_interval_ms: HEARTBEAT_INTERVAL_MS,
   });
+
+  // Verify operative is registered via agent card
+  try {
+    if (!isOperativeRegistered(OPERATIVE)) {
+      logger.error("Operative not registered — refusing to start", {
+        operative: OPERATIVE,
+        hint: "Submit and approve an agent card via the dashboard before starting this consumer.",
+      });
+      console.error(
+        `Error: "${OPERATIVE}" has no approved agent card. Register at /dashboard/agent-cards first.`,
+      );
+      process.exit(1);
+    }
+    logger.info("Operative registration verified", { operative: OPERATIVE });
+  } catch (err) {
+    // DB not available — warn but allow startup (e.g. DB on different host)
+    logger.warn("Could not verify agent registration (DB unavailable)", {
+      operative: OPERATIVE,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   // Connect to NATS
   const nc = await getNatsConnection({

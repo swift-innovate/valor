@@ -93,3 +93,10 @@ export { classifyMission } from "./classifier.js";
 export { dispatchMission, resetMissionCounter } from "./dispatcher.js";
 export { callOllama, callGear1, callGear2 } from "./llm-adapter.js";
 export type { LlmRequest, LlmResponse } from "./llm-adapter.js";
+export {
+  getRegisteredOperatives,
+  getValidOperativeCallsigns,
+  isOperativeRegistered,
+  buildRosterPromptSection,
+} from "./roster.js";
+export type { RegisteredOperative } from "./roster.js";

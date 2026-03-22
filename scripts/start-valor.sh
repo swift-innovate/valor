@@ -103,30 +103,56 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4. Operative Consumer
+# 4. Operative Consumers (dynamic — discovered from agent cards)
 # ---------------------------------------------------------------------------
 echo ""
-echo "── Step 4: Operative Consumer ($OPERATIVE) ──"
+echo "── Step 4: Operative Consumers ──"
 
-if pgrep -f "operative-consumer.ts.*--operative $OPERATIVE" &>/dev/null; then
-  echo "  ✓ Consumer for $OPERATIVE already running"
+VALOR_PORT="${VALOR_PORT:-3200}"
+VALOR_API="http://localhost:${VALOR_PORT}/api/agent-cards?status=approved"
+
+# Try to discover registered operatives from the VALOR API
+REGISTERED_OPERATIVES=""
+if curl -s --connect-timeout 3 "$VALOR_API" &>/dev/null; then
+  REGISTERED_OPERATIVES=$(curl -s "$VALOR_API" | node -e "
+    let buf=''; process.stdin.on('data',d=>buf+=d); process.stdin.on('end',()=>{
+      try { const arr=JSON.parse(buf); console.log(arr.map(c=>c.callsign).join(' ')); }
+      catch(e) { console.error('Parse error'); }
+    });
+  " 2>/dev/null)
+  echo "  Registered operatives: ${REGISTERED_OPERATIVES:-none}"
 else
-  echo "  Starting consumer for $OPERATIVE..."
-  LOG_LEVEL=info \
-  nohup node --import tsx src/consumers/operative-consumer.ts \
-    --operative "$OPERATIVE" \
-    --nats "$NATS_URL" \
-    > "$LOG_DIR/consumer-$OPERATIVE.log" 2>&1 &
-  echo $! > "$LOG_DIR/consumer-$OPERATIVE.pid"
-  sleep 2
-
-  if pgrep -f "operative-consumer.ts.*--operative $OPERATIVE" &>/dev/null; then
-    echo "  ✓ Consumer started (PID $(cat "$LOG_DIR/consumer-$OPERATIVE.pid"))"
-  else
-    echo "  ✗ Consumer failed — check $LOG_DIR/consumer-$OPERATIVE.log"
-    exit 1
-  fi
+  echo "  ⚠ VALOR API not reachable — falling back to OPERATIVE env var"
+  REGISTERED_OPERATIVES="$OPERATIVE"
 fi
+
+# If no registered operatives found, use the env var fallback
+if [ -z "$REGISTERED_OPERATIVES" ]; then
+  echo "  ⚠ No approved agent cards found — using OPERATIVE=$OPERATIVE"
+  REGISTERED_OPERATIVES="$OPERATIVE"
+fi
+
+# Start a consumer for each registered operative
+for OP in $REGISTERED_OPERATIVES; do
+  if pgrep -f "operative-consumer.ts.*--operative $OP" &>/dev/null; then
+    echo "  ✓ Consumer for $OP already running"
+  else
+    echo "  Starting consumer for $OP..."
+    LOG_LEVEL=info \
+    nohup node --import tsx src/consumers/operative-consumer.ts \
+      --operative "$OP" \
+      --nats "$NATS_URL" \
+      > "$LOG_DIR/consumer-$OP.log" 2>&1 &
+    echo $! > "$LOG_DIR/consumer-$OP.pid"
+    sleep 2
+
+    if pgrep -f "operative-consumer.ts.*--operative $OP" &>/dev/null; then
+      echo "  ✓ Consumer started for $OP (PID $(cat "$LOG_DIR/consumer-$OP.pid"))"
+    else
+      echo "  ✗ Consumer for $OP failed — check $LOG_DIR/consumer-$OP.log"
+    fi
+  fi
+done
 
 # ---------------------------------------------------------------------------
 # 5. Telegram Gateway
@@ -184,11 +210,12 @@ else
   echo "  ✗ Director: not running"
 fi
 
-# Consumer
-if pgrep -f "operative-consumer.ts" &>/dev/null; then
-  echo "  ✓ Consumer ($OPERATIVE): running"
+# Consumers
+RUNNING_CONSUMERS=$(pgrep -af "operative-consumer.ts" 2>/dev/null | grep -oP '(?<=--operative )\S+' | tr '\n' ' ')
+if [ -n "$RUNNING_CONSUMERS" ]; then
+  echo "  ✓ Consumers running: $RUNNING_CONSUMERS"
 else
-  echo "  ✗ Consumer ($OPERATIVE): not running"
+  echo "  ✗ No operative consumers running"
 fi
 
 # Telegram
@@ -207,7 +234,7 @@ echo "╠═══════════════════════�
 echo "║  Logs:     $LOG_DIR/"
 echo "║  NATS:     $NATS_URL"
 echo "║  Director: valor.missions.inbound"
-echo "║  Consumer: valor.missions.$OPERATIVE.pending"
+echo "║  Consumers: $REGISTERED_OPERATIVES"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 echo "To stop all services: bash scripts/stop-valor.sh"
