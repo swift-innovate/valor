@@ -188,13 +188,32 @@ export class NATSSubscriber {
   private subscribeSitreps(): void {
     if (!this.nc) return;
 
-    const sub = this.nc.subscribe("valor.sitreps.>", {
+    const nc = this.nc;
+
+    const sub = nc.subscribe("valor.sitreps.>", {
       callback: (_err, msg) => {
         if (_err) return;
         try {
           const envelope = decode<NatsSitrep>(msg);
           natsState.handleSitrep(envelope);
           this.syncSitrepToDb(envelope.payload);
+
+          // Notify Principal on terminal or blocked states
+          const sitrep = envelope.payload;
+          if (sitrep.status === "COMPLETE" || sitrep.status === "FAILED" || sitrep.status === "BLOCKED") {
+            const emoji = sitrep.status === "COMPLETE" ? "✅" : sitrep.status === "FAILED" ? "❌" : "🚧";
+            const label = sitrep.status === "COMPLETE" ? "Complete" : sitrep.status === "FAILED" ? "Failed" : "Blocked";
+            try {
+              nc.publish(
+                "valor.telegram.notify",
+                new TextEncoder().encode(JSON.stringify({
+                  to: "principal",
+                  text: `${emoji} *${sitrep.mission_id}* — ${label}\nOperative: ${sitrep.operative}\n${sitrep.summary}`,
+                  parse_mode: "Markdown",
+                })),
+              );
+            } catch { /* non-fatal */ }
+          }
         } catch (err) {
           console.error("[NATSSubscriber] Error processing sitrep:", err);
         }
