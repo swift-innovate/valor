@@ -43,8 +43,38 @@ missionsLiveRoutes.post("/", async (c) => {
     return c.json({ error: "Title and description are required" }, 400);
   }
 
+  const assigned_to: string = body.assigned_to || "";
+  const routeThroughDirector = !assigned_to || assigned_to.toLowerCase() === "director";
+
+  const nc = currentConnection();
+
+  // ── Path A: no operative specified → route through Director for classification
+  if (routeThroughDirector) {
+    if (!nc) {
+      return c.json({ error: "NATS not connected — cannot route to Director" }, 503);
+    }
+    const missionText = `${body.title}\n\n${body.description}`;
+    const envelope = JSON.stringify({
+      id: generateMissionId(),
+      timestamp: now(),
+      source: "dashboard",
+      type: "mission.inbound",
+      payload: { text: missionText },
+    });
+    try {
+      nc.publish("valor.missions.inbound", new TextEncoder().encode(envelope));
+    } catch (err) {
+      return c.json({ error: "Failed to route to Director" }, 500);
+    }
+    return c.json({
+      status: "routed",
+      assigned_to: "director",
+      message: "Mission sent to Director for classification and routing",
+    }, 202);
+  }
+
+  // ── Path B: operative specified → publish directly to their queue
   const mission_id = generateMissionId();
-  const assigned_to = body.assigned_to || "Director";
   const priority = body.priority || "P2";
   const model_tier = body.model_tier || "balanced";
 
@@ -63,21 +93,14 @@ missionsLiveRoutes.post("/", async (c) => {
     created_at: now(),
   };
 
-  // Try to publish via NATS if connected
-  const nc = currentConnection();
   if (nc) {
     try {
       await publishMissionBrief(nc, "dashboard", brief);
     } catch (err) {
-      // NATS publish failed — still update local state
       console.error("[missions-live] NATS publish failed:", err);
     }
   }
 
-  // Always update local state (optimistic)
-  // Cast brief to NatsMissionBrief — model_tier values differ between
-  // nats/types.ts (local|efficient|balanced|frontier) and types/nats.ts
-  // (fast|standard|reasoning). natsState only uses the common fields.
   natsState.handleMissionBrief({
     id: mission_id,
     timestamp: now(),
@@ -90,7 +113,7 @@ missionsLiveRoutes.post("/", async (c) => {
     mission_id,
     status: "pending",
     assigned_to,
-    message: `Mission ${mission_id} created and dispatched`,
+    message: `Mission ${mission_id} dispatched to ${assigned_to}`,
   }, 201);
 });
 
