@@ -5,8 +5,14 @@
 # Starts all Phase 1 services in order:
 # 1. NATS Server (if not already running)
 # 2. JetStream stream provisioning
-# 3. Director LLM service
-# 4. Operative consumer (eddie by default)
+# 3. VALOR Engine Server (dashboard + API)
+# 4. Director Service
+# 5. Telegram Gateway (if TELEGRAM_BOT_TOKEN is set)
+#
+# NOTE: Operative consumers are NOT started by VALOR. Agents are fully
+# independent — they register via POST /agent-cards, send heartbeats, and
+# poll their own NATS queues. See src/consumers/operative-consumer.ts for
+# the reference template.
 #
 # Usage: bash scripts/start-valor.sh
 #
@@ -14,7 +20,6 @@
 #   NATS_URL          - NATS server URL (default: nats://localhost:4222)
 #   OLLAMA_BASE_URL   - Ollama endpoint (default: http://starbase:40114)
 #   DIRECTOR_MODEL    - Gear 1 model (default: gemma3:27b)
-#   OPERATIVE         - Which operative to start (default: eddie)
 #   VALOR_DIR         - Project root (default: script's parent dir)
 #
 set -euo pipefail
@@ -34,7 +39,6 @@ NATS_URL="${NATS_URL:-nats://localhost:4222}"
 OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://starbase:40114}"
 DIRECTOR_MODEL="${DIRECTOR_MODEL:-gemma3:27b}"
 DIRECTOR_GEAR2_MODEL="${DIRECTOR_GEAR2_MODEL:-nemotron-cascade-2:latest}"
-OPERATIVE="${OPERATIVE:-eddie}"
 LOG_DIR="$VALOR_DIR/logs"
 
 mkdir -p "$LOG_DIR"
@@ -47,7 +51,6 @@ echo "  Project:  $VALOR_DIR"
 echo "  NATS:     $NATS_URL"
 echo "  Ollama:   $OLLAMA_BASE_URL"
 echo "  Model:    $DIRECTOR_MODEL"
-echo "  Operative: $OPERATIVE"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -95,10 +98,22 @@ else
   nohup node --import tsx src/index.ts \
     > "$LOG_DIR/server.log" 2>&1 &
   echo $! > "$LOG_DIR/server.pid"
-  sleep 4
 
-  if pgrep -f "src/index.ts" &>/dev/null; then
-    echo "  ✓ VALOR server started (PID $(cat "$LOG_DIR/server.pid"))"
+  # Wait for the server to be ready (up to 15s)
+  VALOR_PORT="${VALOR_PORT:-3200}"
+  ready=false
+  for i in $(seq 1 15); do
+    sleep 1
+    if curl -s --connect-timeout 1 "http://localhost:${VALOR_PORT}/health" &>/dev/null; then
+      ready=true
+      break
+    fi
+  done
+
+  if $ready; then
+    echo "  ✓ VALOR server ready (PID $(cat "$LOG_DIR/server.pid"))"
+  elif pgrep -f "src/index.ts" &>/dev/null; then
+    echo "  ⚠ VALOR server process running but /health not responding yet"
   else
     echo "  ✗ VALOR server failed to start — check $LOG_DIR/server.log"
     exit 1
@@ -134,62 +149,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 5. Operative Consumers (dynamic — discovered from agent cards)
+# 5. Telegram Gateway
 # ---------------------------------------------------------------------------
 echo ""
-echo "── Step 5: Operative Consumers ──"
-
-VALOR_PORT="${VALOR_PORT:-3200}"
-VALOR_API="http://localhost:${VALOR_PORT}/api/agent-cards?status=approved"
-
-# Try to discover registered operatives from the VALOR API
-REGISTERED_OPERATIVES=""
-if curl -s --connect-timeout 3 "$VALOR_API" &>/dev/null; then
-  REGISTERED_OPERATIVES=$(curl -s "$VALOR_API" | node -e "
-    let buf=''; process.stdin.on('data',d=>buf+=d); process.stdin.on('end',()=>{
-      try { const arr=JSON.parse(buf); console.log(arr.map(c=>c.callsign).join(' ')); }
-      catch(e) { console.error('Parse error'); }
-    });
-  " 2>/dev/null)
-  echo "  Registered operatives: ${REGISTERED_OPERATIVES:-none}"
-else
-  echo "  ⚠ VALOR API not reachable — falling back to OPERATIVE env var"
-  REGISTERED_OPERATIVES="$OPERATIVE"
-fi
-
-# If no registered operatives found, use the env var fallback
-if [ -z "$REGISTERED_OPERATIVES" ]; then
-  echo "  ⚠ No approved agent cards found — using OPERATIVE=$OPERATIVE"
-  REGISTERED_OPERATIVES="$OPERATIVE"
-fi
-
-# Start a consumer for each registered operative
-for OP in $REGISTERED_OPERATIVES; do
-  if pgrep -f "operative-consumer.ts.*--operative $OP" &>/dev/null; then
-    echo "  ✓ Consumer for $OP already running"
-  else
-    echo "  Starting consumer for $OP..."
-    LOG_LEVEL=info \
-    nohup node --import tsx src/consumers/operative-consumer.ts \
-      --operative "$OP" \
-      --nats "$NATS_URL" \
-      > "$LOG_DIR/consumer-$OP.log" 2>&1 &
-    echo $! > "$LOG_DIR/consumer-$OP.pid"
-    sleep 2
-
-    if pgrep -f "operative-consumer.ts.*--operative $OP" &>/dev/null; then
-      echo "  ✓ Consumer started for $OP (PID $(cat "$LOG_DIR/consumer-$OP.pid"))"
-    else
-      echo "  ✗ Consumer for $OP failed — check $LOG_DIR/consumer-$OP.log"
-    fi
-  fi
-done
-
-# ---------------------------------------------------------------------------
-# 6. Telegram Gateway
-# ---------------------------------------------------------------------------
-echo ""
-echo "── Step 6: Telegram Gateway ──"
+echo "── Step 5: Telegram Gateway ──"
 
 if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
   echo "  ⚠ TELEGRAM_BOT_TOKEN not set — skipping gateway"
@@ -215,7 +178,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 7. Health Check
+# 6. Health Check
 # ---------------------------------------------------------------------------
 echo ""
 echo "── Health Check ──"
@@ -249,14 +212,6 @@ else
   echo "  ✗ Director: not running"
 fi
 
-# Consumers
-RUNNING_CONSUMERS=$(pgrep -af "operative-consumer.ts" 2>/dev/null | grep -oP '(?<=--operative )\S+' | tr '\n' ' ')
-if [ -n "$RUNNING_CONSUMERS" ]; then
-  echo "  ✓ Consumers running: $RUNNING_CONSUMERS"
-else
-  echo "  ✗ No operative consumers running"
-fi
-
 # Telegram
 if pgrep -f "gateways/telegram" &>/dev/null; then
   echo "  ✓ Telegram gateway: running"
@@ -274,7 +229,6 @@ echo "║  Dashboard: http://localhost:${VALOR_PORT}/dashboard"
 echo "║  Logs:      $LOG_DIR/"
 echo "║  NATS:      $NATS_URL"
 echo "║  Director:  valor.missions.inbound"
-echo "║  Consumers: $REGISTERED_OPERATIVES"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 echo "To stop all services: bash scripts/stop-valor.sh"

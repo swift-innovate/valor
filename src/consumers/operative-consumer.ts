@@ -12,6 +12,25 @@
  * template — the only difference is --operative <callsign>.
  */
 
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * REFERENCE TEMPLATE — NOT STARTED BY VALOR
+ * ─────────────────────────────────────────────────────────────────────────────
+ * This file is a reference implementation showing how a Node.js/TypeScript agent
+ * can connect to VALOR's NATS queues. VALOR does NOT start this process.
+ *
+ * Agents are fully independent. They:
+ *   1. Register via POST /agent-cards (see SKILL.md)
+ *   2. Send periodic heartbeats to valor.system.heartbeat.<callsign>
+ *   3. Poll valor.missions.<callsign>.pending for assigned work
+ *   4. Execute work on their own LLM/runtime
+ *   5. Publish sitreps back to valor.sitreps.<callsign>
+ *
+ * Any agent in any framework can implement this protocol. See SKILL.md for the
+ * full integration guide.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import { parseArgs } from "node:util";
 import {
   getNatsConnection,
