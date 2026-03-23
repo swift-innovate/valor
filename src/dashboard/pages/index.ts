@@ -10,3 +10,4 @@ export { commsPage } from "./comms.js";
 export { artifactsPage } from "./artifacts.js";
 export { loginPage } from "./login.js";
 export { usersPage } from "./users.js";
+export { initiativesPage } from "./initiatives.js";

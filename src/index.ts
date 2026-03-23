@@ -13,7 +13,7 @@ import {
   createOllamaAdapter,
 } from "./providers/index.js";
 import { getActiveSessions, stopHealthMonitor, startHealthMonitor } from "./stream/index.js";
-import { missionRoutes, missionsLiveRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes, sitrepRoutes, agentCardRoutes, commsRoutes, artifactRoutes, authRoutes, userRoutes } from "./api/index.js";
+import { missionRoutes, missionsLiveRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes, sitrepRoutes, agentCardRoutes, commsRoutes, artifactRoutes, authRoutes, userRoutes, initiativeRoutes } from "./api/index.js";
 import { dashboardRoutes } from "./dashboard/index.js";
 import { loginPage } from "./dashboard/pages/index.js";
 import { sessionMiddleware, requireAuth } from "./auth/index.js";
@@ -69,6 +69,7 @@ app.route("/sitreps", sitrepRoutes);
 app.route("/agent-cards", agentCardRoutes);
 app.route("/comms", commsRoutes);
 app.route("/artifacts", artifactRoutes);
+app.route("/initiatives", initiativeRoutes);
 
 // Dashboard — protected
 app.use("/dashboard/*", requireAuth);

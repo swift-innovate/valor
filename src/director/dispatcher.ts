@@ -25,6 +25,8 @@ import type {
   DecompositionStep,
 } from "./classifier.js";
 import { formatTelegramAlert } from "./safety-gates.js";
+import { listAgents } from "../db/repositories/agent-repo.js";
+import { sendMessage, generateConversationId } from "../db/repositories/comms-repo.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,6 +37,8 @@ export interface DispatchResult {
   missionIds: string[];
   escalated: boolean;
   escalationMessage: string | null;
+  taskDispatched?: boolean;
+  conversationRouted?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +124,10 @@ export async function dispatchMission(
       return dispatchDecompose(nc, output, missionIdPrefix, missionText);
     case "ESCALATE":
       return dispatchEscalate(nc, output, missionIdPrefix, missionText);
+    case "TASK":
+      return dispatchTask(nc, output, missionIdPrefix, missionText);
+    case "CONVERSE":
+      return dispatchConversation(nc, output, missionIdPrefix, missionText);
     default:
       logger.error("Unknown decision type", { decision: output.decision });
       return {
@@ -276,6 +284,146 @@ async function dispatchDecompose(
     missionIds,
     escalated: false,
     escalationMessage: null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// TASK — lightweight fire-and-forget (no mission board entry)
+// ---------------------------------------------------------------------------
+
+async function dispatchTask(
+  nc: NatsConnection,
+  output: DirectorOutput,
+  prefix: string,
+  missionText: string,
+): Promise<DispatchResult> {
+  const task = output.task;
+  if (!task) {
+    logger.error("TASK decision missing task info");
+    return { dispatched: false, missionIds: [], escalated: false, escalationMessage: null };
+  }
+
+  const taskId = `TASK-${prefix}-${Date.now()}`;
+  const encoder = new TextEncoder();
+  const payload = encoder.encode(
+    JSON.stringify({
+      type: "valor.task",
+      source: { id: "director", type: "director" },
+      payload: {
+        task_id: taskId,
+        operative: task.operative,
+        query: task.query,
+        model_tier: task.model_tier,
+        original_text: missionText,
+      },
+      timestamp: new Date().toISOString(),
+    }),
+  );
+
+  // Publish to operative-specific task subject — no mission board entry
+  nc.publish(`valor.tasks.${task.operative.toLowerCase()}`, payload);
+
+  await publishSitrep(nc, "director", {
+    mission_id: taskId,
+    operative: "director",
+    status: "ACCEPTED",
+    progress_pct: 0,
+    summary: `⚡ Task dispatched to ${task.operative} (${task.model_tier}): "${task.query.slice(0, 100)}"`,
+    artifacts: [],
+    blockers: [],
+    next_steps: [`${task.operative} executes and returns result`],
+    tokens_used: null,
+    timestamp: new Date().toISOString(),
+  });
+
+  logger.info("Dispatched TASK", {
+    task_id: taskId,
+    operative: task.operative,
+    query_length: task.query.length,
+  });
+
+  return {
+    dispatched: true,
+    missionIds: [],
+    escalated: false,
+    escalationMessage: null,
+    taskDispatched: true,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// CONVERSE — route to agent comms channel
+// ---------------------------------------------------------------------------
+
+async function dispatchConversation(
+  nc: NatsConnection,
+  output: DirectorOutput,
+  prefix: string,
+  missionText: string,
+): Promise<DispatchResult> {
+  const conv = output.conversation;
+  if (!conv) {
+    logger.error("CONVERSE decision missing conversation info");
+    return { dispatched: false, missionIds: [], escalated: false, escalationMessage: null };
+  }
+
+  // Find target agent by callsign
+  const agents = listAgents({});
+  const targetAgent = agents.find(
+    (a) => a.callsign.toLowerCase() === conv.target_agent.toLowerCase(),
+  );
+
+  if (targetAgent) {
+    try {
+      sendMessage(
+        {
+          from_agent_id: "director",
+          to_agent_id: targetAgent.id,
+          to_division_id: null,
+          subject: `Director: ${conv.summary.slice(0, 80)}`,
+          body: missionText,
+          priority: "routine",
+          category: "advisory",
+          conversation_id: generateConversationId(),
+          in_reply_to: null,
+          attachments: [],
+        },
+        false,
+      );
+      logger.info("Dispatched CONVERSE via comms", {
+        target_agent: conv.target_agent,
+        agent_id: targetAgent.id,
+      });
+    } catch (err) {
+      logger.warn("CONVERSE comms send failed, sending sitrep only", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  } else {
+    logger.warn("CONVERSE target agent not found — routing via sitrep only", {
+      target_agent: conv.target_agent,
+    });
+  }
+
+  await publishSitrep(nc, "director", {
+    mission_id: prefix,
+    operative: "director",
+    status: "COMPLETE",
+    progress_pct: 100,
+    summary: `💬 Conversation routed to ${conv.target_agent}: "${conv.summary}"`,
+    artifacts: [],
+    blockers: [],
+    next_steps: [],
+    tokens_used: null,
+    timestamp: new Date().toISOString(),
+  });
+
+  return {
+    dispatched: false,
+    missionIds: [],
+    escalated: false,
+    escalationMessage: null,
+    conversationRouted: true,
   };
 }
 

@@ -15,6 +15,8 @@ import { natsState } from "../nats-state.js";
 import type { DashboardMission } from "../nats-state.js";
 import { getAuthUser } from "../../auth/index.js";
 import { missionDetailPage } from "./mission-detail.js";
+import { listInitiatives, listMissions } from "../../db/index.js";
+import type { Mission } from "../../types/index.js";
 
 export const missionsPage = new Hono();
 
@@ -79,14 +81,24 @@ function missionRow(m: DashboardMission) {
 
   return html`
     <tr class="border-b border-gray-800 hover:bg-gray-800/50 transition-colors cursor-pointer group"
-        data-mission="${m.mission_id}">
+        data-mission="${m.mission_id}" data-status="${m.status}" data-created-at="${m.created_at}">
       <td class="px-4 py-3" onclick="window.location='/dashboard/missions/${m.mission_id}'">
         <div class="font-mono text-sm text-valor-400">${m.mission_id}</div>
-        <div class="text-xs text-gray-600 mt-0.5">${formatDate(m.created_at)}</div>
+        <div class="text-xs text-gray-600 mt-0.5">
+          <span class="dispatch-age" data-created-at="${m.created_at}">${formatDate(m.created_at)}</span>
+        </div>
       </td>
-      
+
       <td class="px-4 py-3" onclick="window.location='/dashboard/missions/${m.mission_id}'">
-        <div class="font-medium text-gray-200">${m.title}</div>
+        <div class="flex items-center gap-2">
+          <span class="font-medium text-gray-200">${m.title}</span>
+          ${m.status === "pending" || m.status === "active"
+            ? html`<span class="inline-flex items-center gap-1 text-xs text-gray-500 waiting-indicator">
+                <span class="inline-block w-1.5 h-1.5 rounded-full bg-valor-500 animate-pulse"></span>
+                ${m.status === "pending" ? "waiting..." : "working..."}
+              </span>`
+            : ""}
+        </div>
         ${m.latest_sitrep
           ? html`<div class="text-xs text-gray-500 mt-1 italic line-clamp-2">${m.latest_sitrep}</div>`
           : ""}
@@ -142,6 +154,7 @@ missionsPage.get("/", (c) => {
   const statusFilter = c.req.query("status");
   const operativeFilter = c.req.query("operative");
   const showArchived = c.req.query("archived") === "true";
+  const groupByInitiative = c.req.query("group") === "initiative";
 
   let missions: DashboardMission[];
   if (showArchived) {
@@ -156,6 +169,23 @@ missionsPage.get("/", (c) => {
   const stats = natsState.getStats();
   const operatives = natsState.getOperatives();
   const archivedCount = natsState.getArchivedMissions().length;
+
+  // ── Initiative grouping (DB missions grouped by initiative) ──────────
+  const initiatives = groupByInitiative ? listInitiatives({ status: "active" }) : [];
+  const dbMissions = groupByInitiative ? listMissions({}) : [];
+  const missionsByInitiative = new Map<string, (Mission & { initiative_id?: string | null })[]>();
+  const ungroupedDbMissions: (Mission & { initiative_id?: string | null })[] = [];
+  if (groupByInitiative) {
+    for (const m of dbMissions as (Mission & { initiative_id?: string | null })[]) {
+      if (m.initiative_id) {
+        const list = missionsByInitiative.get(m.initiative_id) ?? [];
+        list.push(m);
+        missionsByInitiative.set(m.initiative_id, list);
+      } else {
+        ungroupedDbMissions.push(m);
+      }
+    }
+  }
 
   const content = html`
     <div class="fade-in space-y-6">
@@ -187,6 +217,14 @@ missionsPage.get("/", (c) => {
                 </button>
               `
             : ""}
+          <a href="${groupByInitiative ? "/dashboard/missions" : "/dashboard/missions?group=initiative"}"
+            class="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+              groupByInitiative
+                ? "bg-valor-700 text-white"
+                : "bg-gray-800 hover:bg-gray-700 text-gray-400"
+            }" title="Group by initiative">
+            🚩 By Initiative
+          </a>
         </div>
       </div>
 
@@ -245,6 +283,68 @@ missionsPage.get("/", (c) => {
         </div>
       </div>
 
+      ${groupByInitiative ? html`
+      <!-- Initiative-grouped DB missions -->
+      <div class="space-y-4">
+        ${initiatives.length === 0 && ungroupedDbMissions.length === 0
+          ? html`<div class="text-center py-8 text-sm text-gray-600">No active initiatives. <a href="/dashboard/initiatives" class="text-valor-400 hover:underline">View all initiatives →</a></div>`
+          : html`
+            ${initiatives.map((ini) => {
+              const iniMissions = missionsByInitiative.get(ini.id) ?? [];
+              const complete = iniMissions.filter((m) => ["aar_complete", "complete"].includes(m.status)).length;
+              const pct = iniMissions.length > 0 ? Math.round((complete / iniMissions.length) * 100) : 0;
+              return html`
+                <details class="bg-gray-900 border border-gray-800 rounded-lg" open>
+                  <summary class="px-4 py-3 cursor-pointer flex items-center justify-between gap-3 hover:bg-gray-800/50 rounded-lg">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <span class="text-sm font-semibold text-gray-200 truncate">${ini.title}</span>
+                      <span class="text-xs px-2 py-0.5 rounded-full bg-green-900 text-green-300">${ini.status}</span>
+                    </div>
+                    <div class="flex items-center gap-3 shrink-0">
+                      <span class="text-xs text-gray-500">${complete}/${iniMissions.length}</span>
+                      <div class="w-24 bg-gray-800 rounded-full h-1.5">
+                        <div class="bg-valor-500 h-1.5 rounded-full" style="width: ${pct}%"></div>
+                      </div>
+                    </div>
+                  </summary>
+                  <div class="border-t border-gray-800 overflow-x-auto">
+                    ${iniMissions.length === 0
+                      ? html`<p class="px-4 py-3 text-xs text-gray-600 italic">No missions assigned.</p>`
+                      : html`<table class="w-full text-sm">
+                        <tbody class="divide-y divide-gray-800">
+                          ${iniMissions.map((m) => html`
+                            <tr class="hover:bg-gray-800/30 cursor-pointer" onclick="window.location='/dashboard/missions/${m.id}'">
+                              <td class="px-4 py-2 font-mono text-xs text-gray-500 w-36">${m.id.slice(0, 12)}…</td>
+                              <td class="px-4 py-2 text-gray-300">${m.title}</td>
+                              <td class="px-4 py-2 text-xs text-gray-400">${m.status}</td>
+                            </tr>`)}
+                        </tbody>
+                      </table>`}
+                  </div>
+                </details>`;
+            })}
+            ${ungroupedDbMissions.length > 0 ? html`
+              <details class="bg-gray-900 border border-gray-800 rounded-lg">
+                <summary class="px-4 py-3 cursor-pointer flex items-center gap-3 hover:bg-gray-800/50 rounded-lg">
+                  <span class="text-sm font-semibold text-gray-400">Ungrouped</span>
+                  <span class="text-xs text-gray-600">${ungroupedDbMissions.length} missions</span>
+                </summary>
+                <div class="border-t border-gray-800 overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <tbody class="divide-y divide-gray-800">
+                      ${ungroupedDbMissions.map((m) => html`
+                        <tr class="hover:bg-gray-800/30 cursor-pointer" onclick="window.location='/dashboard/missions/${m.id}'">
+                          <td class="px-4 py-2 font-mono text-xs text-gray-500 w-36">${m.id.slice(0, 12)}…</td>
+                          <td class="px-4 py-2 text-gray-300">${m.title}</td>
+                          <td class="px-4 py-2 text-xs text-gray-400">${m.status}</td>
+                        </tr>`)}
+                    </tbody>
+                  </table>
+                </div>
+              </details>` : ""}
+          `}
+      </div>
+      ` : html`
       <!-- Mission table -->
       <div class="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
         <div class="overflow-x-auto">
@@ -278,6 +378,7 @@ missionsPage.get("/", (c) => {
         </div>
       </div>
     </div>
+      `}
 
     <!-- Create Mission Modal -->
     <div id="create-modal" class="fixed inset-0 z-50 hidden">
@@ -527,6 +628,30 @@ missionsPage.get("/", (c) => {
 
         connect();
         window.addEventListener('beforeunload', function() { if (eventSource) eventSource.close(); });
+      })();
+
+      // ── Dispatch age timer ─────────────────────────────────────────
+      // Updates "Dispatched X ago" on pending/active mission rows every 5s.
+      (function() {
+        function relativeTime(isoStr) {
+          var ms = Date.now() - new Date(isoStr).getTime();
+          if (ms < 60000) return Math.floor(ms / 1000) + 's ago';
+          if (ms < 3600000) return Math.floor(ms / 60000) + 'm ago';
+          return Math.floor(ms / 3600000) + 'h ago';
+        }
+
+        function updateAges() {
+          document.querySelectorAll('tr[data-status="pending"], tr[data-status="active"]').forEach(function(row) {
+            var span = row.querySelector('.dispatch-age');
+            if (span) {
+              var created = span.dataset.createdAt;
+              if (created) span.textContent = 'Dispatched ' + relativeTime(created);
+            }
+          });
+        }
+
+        updateAges();
+        setInterval(updateAges, 5000);
       })();
     </script>`;
 

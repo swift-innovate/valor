@@ -12,6 +12,7 @@ const NAV_ITEMS: Array<{ href: string; label: string; icon: string; directorOnly
   { href: "/dashboard/divisions", label: "Divisions", icon: "layers" },
   { href: "/dashboard/decisions", label: "Decisions", icon: "zap" },
   { href: "/dashboard/agent-cards", label: "Agent Cards", icon: "id-badge" },
+  { href: "/dashboard/initiatives", label: "Initiatives", icon: "flag" },
   { href: "/dashboard/comms", label: "Comms", icon: "message-square" },
   { href: "/dashboard/artifacts", label: "Artifacts", icon: "file-code" },
   { href: "/dashboard/users", label: "Users", icon: "user-cog", directorOnly: true },

@@ -46,6 +46,7 @@ missionRoutes.post("/", async (c) => {
 
   const mission = createMission({
     division_id: body.division_id ?? null,
+    initiative_id: body.initiative_id ?? null,
     title: body.title,
     objective: body.objective,
     status: "draft",
@@ -58,7 +59,7 @@ missionRoutes.post("/", async (c) => {
     token_usage: null,
     cost_usd: 0,
     revision_count: 0,
-    max_revisions: body.max_revisions ?? 3,
+    max_revisions: body.max_revisions ?? 5,
     parent_mission_id: body.parent_mission_id ?? null,
     dispatched_at: null,
     completed_at: null,
@@ -85,6 +86,7 @@ missionRoutes.post("/from-sigint", async (c) => {
   // Create the mission
   const mission = createMission({
     division_id: body.division_id ?? null,
+    initiative_id: body.initiative_id ?? null,
     title: body.title,
     objective: body.objective,
     status: "draft",
@@ -97,7 +99,7 @@ missionRoutes.post("/from-sigint", async (c) => {
     token_usage: null,
     cost_usd: 0,
     revision_count: 0,
-    max_revisions: body.max_revisions ?? 3,
+    max_revisions: body.max_revisions ?? 5,
     parent_mission_id: null,
     dispatched_at: null,
     completed_at: null,

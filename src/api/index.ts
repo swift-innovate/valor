@@ -10,3 +10,4 @@ export { commsRoutes } from "./comms.js";
 export { artifactRoutes } from "./artifacts.js";
 export { authRoutes } from "./auth.js";
 export { userRoutes } from "./users.js";
+export { initiativeRoutes } from "./initiatives.js";

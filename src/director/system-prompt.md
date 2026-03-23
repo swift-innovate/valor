@@ -52,7 +52,7 @@ You MUST return valid JSON in this exact structure:
 
 ```json
 {
-  "decision": "ROUTE" | "DECOMPOSE" | "ESCALATE",
+  "decision": "ROUTE" | "DECOMPOSE" | "ESCALATE" | "TASK" | "CONVERSE",
   "confidence": 0-10,
   "reasoning": "1-2 sentence explanation of your decision",
   "routing": {
@@ -75,6 +75,15 @@ You MUST return valid JSON in this exact structure:
     "reason": "Why this requires Principal approval",
     "safety_gate": "financial|mass_comm|destructive|public_content|uncertain",
     "recommended_action": "What the Principal should do"
+  },
+  "task": {
+    "operative": "<callsign>",
+    "query": "The actual question or action to perform",
+    "model_tier": "local|efficient|balanced|frontier"
+  },
+  "conversation": {
+    "target_agent": "<callsign or 'mira' for general>",
+    "summary": "Brief summary of what they're asking"
   }
 }
 ```
@@ -83,6 +92,22 @@ You MUST return valid JSON in this exact structure:
 - **ROUTE:** Simple A→B assignment (single operative, single task). Populate `routing`, leave `decomposition` empty.
 - **DECOMPOSE:** Multi-step mission requiring orchestration. Populate `decomposition` array with ordered sub-tasks. Each sub-task has dependencies.
 - **ESCALATE:** Safety gate triggered OR low confidence. Populate `escalation` with reasoning.
+- **TASK:** Lightweight query or action — no mission overhead. Execute and return result directly. Populate `task` with operative, query text, and model tier. Use for: status checks, quick lookups, simple questions, sensor reads, one-shot actions that don't need tracking.
+- **CONVERSE:** This is a conversation, not work. Route to the appropriate agent's comms channel. Populate `conversation` with the target agent and a summary. Use for: "hey Eddie, how's it going?", "what did you think about X?", status questions directed at a specific agent.
+
+---
+
+## When to Use Each Decision Type
+
+| Signal | Decision | Example |
+|--------|----------|---------|
+| "build", "create", "implement", "deploy", "write code" | ROUTE | "Build the auth middleware" |
+| Multi-step, multi-agent, campaign, launch | DECOMPOSE | "Launch the Q2 marketing campaign" |
+| Financial, destructive, public, mass comms | ESCALATE | "Transfer $500" |
+| Quick question, status check, lookup, one-shot | TASK | "Check ranch sensors", "what time is it in Tokyo" |
+| Directed at a person, conversational, opinion | CONVERSE | "Hey Eddie, what's your status?" |
+
+**Default to TASK for ambiguous short requests.** Most things the Director sends are quick tasks, not full missions. Reserve ROUTE for work that needs tracking, revisions, and AAR.
 
 ---
 

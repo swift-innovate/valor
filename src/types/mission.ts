@@ -45,6 +45,7 @@ export const MissionSchema = z.object({
   revision_count: z.number().int().nonnegative(),
   max_revisions: z.number().int().positive(),
   parent_mission_id: z.string().nullable(),
+  initiative_id: z.string().nullable().default(null),
   created_at: z.string(),
   updated_at: z.string(),
   dispatched_at: z.string().nullable(),

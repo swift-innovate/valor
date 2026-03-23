@@ -135,3 +135,18 @@ export {
   deleteUserSessions,
   cleanExpiredSessions,
 } from "./session-repo.js";
+
+export {
+  createInitiative,
+  getInitiative,
+  listInitiatives,
+  updateInitiative,
+  getInitiativeProgress,
+  assignMissionToInitiative,
+  type Initiative,
+  type InitiativeStatus,
+  type InitiativePriority,
+  type InitiativeProgress,
+  type CreateInitiativeInput,
+  type UpdateInitiativeInput,
+} from "./initiative-repo.js";

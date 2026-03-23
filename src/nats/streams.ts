@@ -25,6 +25,10 @@ function msToNanos(ms: number): Nanos {
 /** Milliseconds per day. */
 const DAY_MS = 86_400_000;
 
+/** How long JetStream waits for an ack before redelivering. Configurable via NATS_ACK_WAIT_MS.
+ *  Default: 600000 (10 min) — LLM calls + Ollama cold starts can take several minutes. */
+const NATS_ACK_WAIT_MS = parseInt(process.env.NATS_ACK_WAIT_MS ?? "600000", 10);
+
 /**
  * Ensure all VALOR JetStream streams exist. Idempotent — updates existing
  * streams if configuration has changed.
@@ -93,10 +97,14 @@ export async function ensureMissionConsumer(
     ack_policy: AckPolicy.Explicit,
     deliver_policy: DeliverPolicy.All,
     max_deliver: 3,
-    ack_wait: msToNanos(30_000),
+    ack_wait: msToNanos(NATS_ACK_WAIT_MS),
   });
 
-  logger.info("NATS mission consumer ensured", { consumer: consumerName, operative });
+  logger.info("NATS mission consumer ensured", {
+    consumer: consumerName,
+    operative,
+    ack_wait_ms: NATS_ACK_WAIT_MS,
+  });
 }
 
 /**

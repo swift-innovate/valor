@@ -33,7 +33,7 @@ import {
 // Types — Director LLM output schema
 // ---------------------------------------------------------------------------
 
-export type DirectorDecision = "ROUTE" | "DECOMPOSE" | "ESCALATE";
+export type DirectorDecision = "ROUTE" | "DECOMPOSE" | "ESCALATE" | "TASK" | "CONVERSE";
 
 export interface RoutingInfo {
   operative: string;
@@ -57,6 +57,17 @@ export interface EscalationInfo {
   recommended_action: string;
 }
 
+export interface TaskInfo {
+  operative: string;
+  query: string;
+  model_tier: "local" | "efficient" | "balanced" | "frontier";
+}
+
+export interface ConversationInfo {
+  target_agent: string;
+  summary: string;
+}
+
 export interface DirectorOutput {
   decision: DirectorDecision;
   confidence: number;
@@ -64,6 +75,8 @@ export interface DirectorOutput {
   routing?: RoutingInfo;
   decomposition?: DecompositionStep[];
   escalation?: EscalationInfo;
+  task?: TaskInfo;
+  conversation?: ConversationInfo;
 }
 
 export interface ClassifierResult {
@@ -142,7 +155,7 @@ function parseDirectorJson(raw: string): DirectorOutput | null {
   return null;
 }
 
-const VALID_DECISIONS = new Set(["ROUTE", "DECOMPOSE", "ESCALATE"]);
+const VALID_DECISIONS = new Set(["ROUTE", "DECOMPOSE", "ESCALATE", "TASK", "CONVERSE"]);
 
 function validateOutput(obj: unknown): DirectorOutput | null {
   if (!obj || typeof obj !== "object") return null;
@@ -209,6 +222,38 @@ function validateOutput(obj: unknown): DirectorOutput | null {
     };
   }
 
+  if (o.decision === "TASK" && o.task && typeof o.task === "object") {
+    const t = o.task as Record<string, unknown>;
+    const operative = t.operative as string;
+    if (validOperatives.has(operative)) {
+      result.task = {
+        operative,
+        query: (t.query as string) ?? "",
+        model_tier: (t.model_tier as TaskInfo["model_tier"]) ?? "local",
+      };
+    } else {
+      // Unknown operative — escalate
+      logger.warn("TASK routed to unregistered operative, forcing ESCALATE", {
+        operative,
+        registered: Array.from(validOperatives),
+      });
+      result.decision = "ESCALATE";
+      result.escalation = {
+        reason: `Task operative "${operative}" is not registered. Available: ${Array.from(validOperatives).join(", ") || "none"}`,
+        safety_gate: "uncertain",
+        recommended_action: "Reassign to an available operative.",
+      };
+    }
+  }
+
+  if (o.decision === "CONVERSE" && o.conversation && typeof o.conversation === "object") {
+    const cv = o.conversation as Record<string, unknown>;
+    result.conversation = {
+      target_agent: (cv.target_agent as string) ?? "mira",
+      summary: (cv.summary as string) ?? "",
+    };
+  }
+
   return result;
 }
 
@@ -242,6 +287,25 @@ async function sendProgressUpdate(
       mission_id: missionId,
       error: err instanceof Error ? err.message : String(err),
     });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Progress summary builder
+// ---------------------------------------------------------------------------
+
+function buildProgressSummary(output: DirectorOutput, label: string): string {
+  switch (output.decision) {
+    case "ROUTE":
+      return `✅ Mission classified${label}: ROUTE → ${output.routing?.operative ?? "unknown"}`;
+    case "DECOMPOSE":
+      return `✅ Mission decomposed${label} into ${output.decomposition?.length ?? 0} sub-tasks`;
+    case "TASK":
+      return `⚡ Task dispatched${label}: ${output.task?.operative ?? "unknown"} — "${output.task?.query?.slice(0, 80) ?? ""}"`;
+    case "CONVERSE":
+      return `💬 Conversation routed${label} → ${output.conversation?.target_agent ?? "unknown"}`;
+    default:
+      return `⚠️ Mission escalated${label}: ${output.escalation?.reason ?? "unknown"}`;
   }
 }
 
@@ -456,14 +520,7 @@ export async function classifyMission(
     });
 
     if (nc) {
-      const operative = gear1Output.routing?.operative ?? "(decomposed)";
-      const summary =
-        gear1Output.decision === "ROUTE"
-          ? `✅ Mission classified: ROUTE → ${operative}`
-          : gear1Output.decision === "DECOMPOSE"
-            ? `✅ Mission decomposed into ${gear1Output.decomposition?.length ?? 0} sub-tasks`
-            : `⚠️ Mission escalated: ${gear1Output.escalation?.reason ?? "unknown"}`;
-
+      const summary = buildProgressSummary(gear1Output, "");
       await sendProgressUpdate(nc, mid, "COMPLETE", summary);
     }
 
@@ -506,14 +563,7 @@ export async function classifyMission(
     });
 
     if (nc) {
-      const operative = gear2Output.routing?.operative ?? "(decomposed)";
-      const summary =
-        gear2Output.decision === "ROUTE"
-          ? `✅ Mission classified (Gear 2): ROUTE → ${operative}`
-          : gear2Output.decision === "DECOMPOSE"
-            ? `✅ Mission decomposed (Gear 2) into ${gear2Output.decomposition?.length ?? 0} sub-tasks`
-            : `⚠️ Mission escalated (Gear 2): ${gear2Output.escalation?.reason ?? "unknown"}`;
-
+      const summary = buildProgressSummary(gear2Output, " (Gear 2)");
       await sendProgressUpdate(nc, mid, "COMPLETE", summary);
     }
 
