@@ -9,7 +9,7 @@
  */
 
 import { Hono } from "hono";
-import { html } from "hono/html";
+import { html, raw } from "hono/html";
 import { layout } from "../layout.js";
 import { natsState } from "../nats-state.js";
 import type { DashboardMission } from "../nats-state.js";
@@ -59,6 +59,8 @@ function rowActions(m: DashboardMission) {
   const btns: ReturnType<typeof html>[] = [];
 
   if (!isTerminal) {
+    btns.push(html`<button onclick="reassignMission('${m.mission_id}')"
+      class="px-2 py-1 text-xs font-medium rounded bg-blue-900/60 hover:bg-blue-800 text-blue-300 transition-colors" title="Reassign">↗</button>`);
     btns.push(html`<button onclick="cancelMission('${m.mission_id}')"
       class="px-2 py-1 text-xs font-medium rounded bg-red-900/60 hover:bg-red-800 text-red-300 transition-colors" title="Cancel">✕</button>`);
   }
@@ -74,10 +76,33 @@ function rowActions(m: DashboardMission) {
   return html`<div class="flex items-center gap-1">${btns}</div>`;
 }
 
+// ── Operative resolution ─────────────────────────────────────────────
+
+function resolveOperative(m: DashboardMission): string {
+  if (m.assigned_to !== "director") return m.assigned_to;
+  if (m.latest_sitrep) {
+    const routeMatch = m.latest_sitrep.match(/Routed to (\w+)/i);
+    if (routeMatch) return routeMatch[1];
+    const decompMatch = m.latest_sitrep.match(/Decomposed into (\d+)/);
+    if (decompMatch) return `${decompMatch[1]} sub-missions`;
+  }
+  return m.assigned_to;
+}
+
+// ── Sitrep linkifier ─────────────────────────────────────────────────
+
+function linkifyMissionIds(text: string): string {
+  return text.replace(/(VM-\d+(?:-\d+)?)/g,
+    '<a href="/dashboard/missions/$1" class="text-valor-400 hover:underline">$1</a>');
+}
+
 // ── Mission row ──────────────────────────────────────────────────────
 
 function missionRow(m: DashboardMission) {
   const priorityClass = PRIORITY_COLORS[m.priority] ?? PRIORITY_COLORS.P2;
+  const displayTitle = /^VM-\d/.test(m.title) && m.description
+    ? m.description.slice(0, 80) + (m.description.length > 80 ? "…" : "")
+    : m.title;
 
   return html`
     <tr class="border-b border-gray-800 hover:bg-gray-800/50 transition-colors cursor-pointer group"
@@ -91,7 +116,7 @@ function missionRow(m: DashboardMission) {
 
       <td class="px-4 py-3" onclick="window.location='/dashboard/missions/${m.mission_id}'">
         <div class="flex items-center gap-2">
-          <span class="font-medium text-gray-200">${m.title}</span>
+          <span class="font-medium text-gray-200">${displayTitle}</span>
           ${m.status === "pending" || m.status === "active"
             ? html`<span class="inline-flex items-center gap-1 text-xs text-gray-500 waiting-indicator">
                 <span class="inline-block w-1.5 h-1.5 rounded-full bg-valor-500 animate-pulse"></span>
@@ -100,7 +125,7 @@ function missionRow(m: DashboardMission) {
             : ""}
         </div>
         ${m.latest_sitrep
-          ? html`<div class="text-xs text-gray-500 mt-1 italic line-clamp-2">${m.latest_sitrep}</div>`
+          ? html`<div class="text-xs text-gray-500 mt-1 italic line-clamp-2">${raw(linkifyMissionIds(m.latest_sitrep))}</div>`
           : ""}
       </td>
 
@@ -109,7 +134,7 @@ function missionRow(m: DashboardMission) {
       </td>
 
       <td class="px-4 py-3" onclick="window.location='/dashboard/missions/${m.mission_id}'">
-        <div class="text-sm text-gray-300">${m.assigned_to}</div>
+        <div class="text-sm text-gray-300">${resolveOperative(m)}</div>
       </td>
 
       <td class="px-4 py-3" onclick="window.location='/dashboard/missions/${m.mission_id}'">
@@ -159,11 +184,14 @@ missionsPage.get("/", (c) => {
   let missions: DashboardMission[];
   if (showArchived) {
     missions = natsState.getArchivedMissions();
+  } else if (statusFilter === "all") {
+    missions = natsState.getMissions({ operative: operativeFilter });
+  } else if (statusFilter) {
+    missions = natsState.getMissions({ status: statusFilter as any, operative: operativeFilter });
   } else {
-    missions = natsState.getMissions({
-      status: statusFilter as any,
-      operative: operativeFilter,
-    });
+    // Default view: hide terminal missions
+    const all = natsState.getMissions({ operative: operativeFilter });
+    missions = all.filter(m => m.status !== "complete" && m.status !== "failed");
   }
 
   const stats = natsState.getStats();
@@ -230,7 +258,7 @@ missionsPage.get("/", (c) => {
 
       <!-- Stats bar with clickable filters -->
       <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
-        <a href="/dashboard/missions" class="block bg-gray-900 rounded-lg border ${!statusFilter && !showArchived ? "border-valor-500" : "border-gray-800"} p-3 hover:border-valor-500 transition-colors">
+        <a href="?status=all" class="block bg-gray-900 rounded-lg border ${statusFilter === "all" ? "border-valor-500" : "border-gray-800"} p-3 hover:border-valor-500 transition-colors">
           <div class="text-lg font-bold text-gray-200">${stats.missions.total}</div>
           <div class="text-xs text-gray-500 uppercase">All</div>
         </a>
@@ -530,6 +558,18 @@ missionsPage.get("/", (c) => {
         });
         if (res.ok) { showToast('Mission archived', 'success'); setTimeout(function(){ location.reload(); }, 500); }
         else { var d = await res.json(); showToast(d.error || 'Archive failed', 'error'); }
+      }
+
+      async function reassignMission(id) {
+        var operative = prompt('Reassign to which operative?');
+        if (!operative) return;
+        var res = await fetch('/api/missions-live/' + id + '/reassign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ operative: operative }),
+        });
+        if (res.ok) { showToast('Mission reassigned to ' + operative, 'success'); setTimeout(function(){ location.reload(); }, 500); }
+        else { var d = await res.json(); showToast(d.error || 'Reassign failed', 'error'); }
       }
 
       async function archiveAllCompleted() {
