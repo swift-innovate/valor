@@ -17,14 +17,16 @@ Your lifecycle as a VALOR agent:
 2. **Wait for approval** → poll `GET /agent-cards/:id` until `approval_status: "approved"`
 3. **Start your main loop** — once approved, run continuously:
    - **Heartbeat** → `POST /agents/:agentId/heartbeat` every 30 seconds
-   - **Check inbox** → `GET /comms/agents/:agentId/inbox?since=<last_check>` every 10-15 seconds
+   - **Check mission inbox** → `GET /api/missions-live?operative=<callsign>&status=pending` every 10-15 seconds — this is where new missions arrive
+   - **Check directives** → `GET /api/missions-live/directives/<callsign>` on each cycle — abort/reassign signals from the Principal
+   - **Check comms inbox** → `GET /comms/agents/:agentId/inbox?since=<last_check>` — messages, questions, context from the Principal or other agents
    - **Respond to messages** → read new messages, think, reply via `POST /comms/messages`
-   - **Check missions** → `GET /agents/:agentId/missions` for assigned work
-4. **Report status** → `POST /sitreps` during missions
+4. **Accept a mission** → submit `POST /api/missions-live/:id/sitrep` with `status: "ACCEPTED"` immediately on pickup
+5. **Report status** → `POST /api/missions-live/:id/sitrep` throughout execution
 
 ### Agent Main Loop (Required)
 
-**You must actively poll for messages.** VALOR does not push messages to you over HTTP — you must check your inbox regularly and respond. This is your core duty as a VALOR agent.
+**You must actively poll.** VALOR does not push to you over HTTP — you must check your mission inbox and comms inbox regularly. This is your core duty as a VALOR agent.
 
 ```
 On startup:
@@ -33,20 +35,26 @@ On startup:
      - Do NOT default to empty string or epoch — you will replay entire history
 
 Every 10-15 seconds:
-  1. GET /comms/agents/:agentId/inbox?since=<LAST_CHECK>
-  2. Filter out messages where payload.from_agent_id === YOUR_AGENT_ID
-     - The inbox returns messages targeted at you, but in group conversations
-       your own replies also appear. Skip them or you will loop on yourself.
-  3. For each new message from ANOTHER agent:
-     a. Read the message content and context
-     b. If group conversation: GET /comms/conversations/:conversationId for full thread
-     c. Formulate a response
-     d. POST /comms/messages with your reply:
-        - conversation_id: <from the message>
-        - in_reply_to: <event ID of the message you're replying to>
-  4. Update LAST_CHECK to the timestamp of the most recent message processed
+  1. GET /api/missions-live?operative=<CALLSIGN>&status=pending
+     - For each pending mission:
+       a. POST /api/missions-live/:id/sitrep  { status: "ACCEPTED", summary: "Picked up" }
+       b. Begin work on the mission
+       c. Report progress via POST /api/missions-live/:id/sitrep throughout
+
+  2. GET /api/missions-live/directives/<CALLSIGN>
+     - If any abort directives arrive for your active mission: stop work,
+       submit a FAILED sitrep, then return to idle (see Directive Polling below)
+
+  3. GET /comms/agents/:agentId/inbox?since=<LAST_CHECK>
+     - Filter out messages where payload.from_agent_id === YOUR_AGENT_ID
+       (your own replies appear in group threads — skip them)
+     - For each new message from another agent:
+       a. GET /comms/conversations/:conversationId for full thread context
+       b. POST /comms/messages with your reply
+
+  4. Update LAST_CHECK to the timestamp of the most recent comms message processed
   5. Persist LAST_CHECK to state file (survives restarts)
-  6. POST /agents/:agentId/heartbeat (can be every 30s instead of every loop)
+  6. POST /agents/:agentId/heartbeat (every 30s — can be every loop or a separate timer)
 ```
 
 ### Critical: Persist LAST_CHECK Across Restarts
