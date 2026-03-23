@@ -51,7 +51,7 @@ function rowToEvent(row: Record<string, unknown>): EventEnvelope {
   };
 }
 
-export function sendMessage(input: CommsMessage): EventEnvelope {
+export function sendMessage(input: CommsMessage, autoThread = false): EventEnvelope {
   // Validate from_agent (director is a special case)
   if (input.from_agent_id !== "director") {
     const fromAgent = getAgent(input.from_agent_id);
@@ -82,6 +82,48 @@ export function sendMessage(input: CommsMessage): EventEnvelope {
     if (!artifact) throw new Error(`Artifact not found: ${artId}`);
   }
 
+  // Auto-threading: when no conversation_id was provided by the caller, look for an
+  // existing conversation with the same subject + participant overlap within 24 hours.
+  // Division broadcasts are excluded (to_agent_id must be present).
+  let conversationId = input.conversation_id;
+  if (autoThread && input.to_agent_id) {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    // Normalize "Re: " prefix so replies thread into the original conversation.
+    // @base_subject strips one "Re: " level; @subject keeps the original for exact match.
+    const baseSubject = input.subject.startsWith("Re: ") ? input.subject.slice(4) : input.subject;
+    const existing = getDb().queryOne<{ conversation_id: string }>(
+      `SELECT e.conversation_id FROM events e
+       WHERE e.type = 'comms.message'
+         AND e.timestamp >= @since
+         AND (
+           json_extract(e.payload, '$.subject') = @subject
+           OR json_extract(e.payload, '$.subject') = @base_subject
+         )
+         AND e.conversation_id IN (
+           SELECT e2.conversation_id FROM events e2
+           WHERE e2.type = 'comms.message'
+             AND (
+               json_extract(e2.payload, '$.from_agent_id') = @from_id
+               OR json_extract(e2.payload, '$.to_agent_id') = @from_id
+               OR json_extract(e2.payload, '$.from_agent_id') = @to_id
+               OR json_extract(e2.payload, '$.to_agent_id') = @to_id
+             )
+         )
+       ORDER BY e.timestamp DESC
+       LIMIT 1`,
+      {
+        since,
+        subject: input.subject,
+        base_subject: baseSubject,
+        from_id: input.from_agent_id,
+        to_id: input.to_agent_id,
+      },
+    );
+    if (existing?.conversation_id) {
+      conversationId = existing.conversation_id;
+    }
+  }
+
   const source =
     input.from_agent_id === "director"
       ? { id: "director", type: "director" as const }
@@ -107,7 +149,7 @@ export function sendMessage(input: CommsMessage): EventEnvelope {
   // Check if this is the first message in this conversation (before publishing)
   const countRow = getDb().queryOne<{ cnt: number }>(
     "SELECT COUNT(*) as cnt FROM events WHERE type = 'comms.message' AND conversation_id = @conv_id",
-    { conv_id: input.conversation_id },
+    { conv_id: conversationId },
   );
   const existingCount = countRow?.cnt ?? 0;
 
@@ -118,7 +160,7 @@ export function sendMessage(input: CommsMessage): EventEnvelope {
     type: "comms.message",
     source,
     target,
-    conversation_id: input.conversation_id,
+    conversation_id: conversationId,
     in_reply_to: input.in_reply_to,
     payload,
     metadata: null,
@@ -130,7 +172,7 @@ export function sendMessage(input: CommsMessage): EventEnvelope {
       type: "comms.message.flash",
       source,
       target,
-      conversation_id: input.conversation_id,
+      conversation_id: conversationId,
       in_reply_to: input.in_reply_to,
       payload,
       metadata: null,
@@ -143,9 +185,9 @@ export function sendMessage(input: CommsMessage): EventEnvelope {
       type: "comms.conversation.created",
       source: { id: "system", type: "system" },
       target: null,
-      conversation_id: input.conversation_id,
+      conversation_id: conversationId,
       in_reply_to: null,
-      payload: { conversation_id: input.conversation_id },
+      payload: { conversation_id: conversationId },
       metadata: null,
     });
   }

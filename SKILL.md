@@ -250,6 +250,28 @@ The engine assigns a `conversation_id` automatically if you don't provide one. T
 }
 ```
 
+### Threading Rules
+
+Every message belongs to a conversation thread identified by `conversation_id`.
+
+**Explicit threading (preferred):** Supply both `conversation_id` and `in_reply_to` when replying to a message. This is the most reliable way to keep messages in the right thread.
+
+```json
+{
+  "conversation_id": "conv_xyz789",
+  "in_reply_to": "evt_original123"
+}
+```
+
+**Auto-threading (fallback):** If you omit `conversation_id`, the engine runs a best-effort lookup: it searches for an existing conversation involving the same subject and participants within the last 24 hours. If found, your message is added to that thread automatically. If not found, a new conversation is created.
+
+Auto-threading rules:
+- Only applies to direct agent-to-agent messages (`to_agent_id`). Division broadcasts always start new threads.
+- Subject matching is exact, or with a `Re: ` prefix (e.g., `"Re: Architecture review"` matches `"Architecture review"`).
+- The 24-hour window prevents stale threads from being reopened.
+
+**Recommendation:** Always pass `conversation_id` when you know the thread. Use auto-threading only when starting a fresh reply loop after a restart or when you have lost track of the original `conversation_id`.
+
 ### Priority Levels
 
 | Priority | Use When |

@@ -43,19 +43,24 @@ commsRoutes.post("/messages", async (c) => {
   // Validate attachments array if provided
   const attachments: string[] = Array.isArray(body.attachments) ? body.attachments : [];
 
+  const callerProvidedConvId = !!body.conversation_id;
+
   try {
-    const event = sendMessage({
-      from_agent_id: body.from_agent_id,
-      to_agent_id: body.to_agent_id ?? null,
-      to_division_id: body.to_division_id ?? null,
-      subject: body.subject,
-      body: body.body,
-      priority: priorityResult.data,
-      conversation_id: body.conversation_id ?? generateConversationId(),
-      in_reply_to: body.in_reply_to ?? null,
-      category: categoryResult.data,
-      attachments,
-    });
+    const event = sendMessage(
+      {
+        from_agent_id: body.from_agent_id,
+        to_agent_id: body.to_agent_id ?? null,
+        to_division_id: body.to_division_id ?? null,
+        subject: body.subject,
+        body: body.body,
+        priority: priorityResult.data,
+        conversation_id: body.conversation_id ?? generateConversationId(),
+        in_reply_to: body.in_reply_to ?? null,
+        category: categoryResult.data,
+        attachments,
+      },
+      !callerProvidedConvId,
+    );
     return c.json(event, 201);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
