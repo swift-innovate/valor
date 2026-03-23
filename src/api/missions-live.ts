@@ -53,10 +53,12 @@ missionsLiveRoutes.post("/", async (c) => {
     if (!nc) {
       return c.json({ error: "NATS not connected — cannot route to Director" }, 503);
     }
+    const mission_id = generateMissionId();
+    const created = now();
     const missionText = `${body.title}\n\n${body.description}`;
     const envelope = JSON.stringify({
-      id: generateMissionId(),
-      timestamp: now(),
+      id: mission_id,
+      timestamp: created,
       source: "dashboard",
       type: "mission.inbound",
       payload: { text: missionText },
@@ -66,7 +68,34 @@ missionsLiveRoutes.post("/", async (c) => {
     } catch (err) {
       return c.json({ error: "Failed to route to Director" }, 500);
     }
+
+    // Pre-seed nats-state so the parent appears on the board with correct
+    // title/description while the Director classifies. The Director will use
+    // this same ID as its mission prefix (VM-NNN → VM-NNN-1, VM-NNN-2, etc).
+    const brief: MissionBrief = {
+      mission_id,
+      title: body.title,
+      description: body.description || "",
+      priority: (body.priority || "P2") as MissionBrief["priority"],
+      assigned_to: "director",
+      depends_on: [],
+      parent_mission: null,
+      model_tier: "balanced" as MissionBrief["model_tier"],
+      acceptance_criteria: [],
+      context_refs: [],
+      deadline: null,
+      created_at: created,
+    };
+    natsState.handleMissionBrief({
+      id: mission_id,
+      timestamp: created,
+      source: "dashboard",
+      type: "mission.brief",
+      payload: brief as unknown as NatsMissionBrief,
+    });
+
     return c.json({
+      mission_id,
       status: "routed",
       assigned_to: "director",
       message: "Mission sent to Director for classification and routing",

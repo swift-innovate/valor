@@ -149,7 +149,9 @@ async function main(): Promise<void> {
         const text = new TextDecoder().decode(msg.data);
         const envelope = JSON.parse(text) as VALORMessage<{ text: string }>;
         const missionText = envelope.payload?.text ?? text;
-        const missionId = nextMissionId();
+        // Use the envelope's ID as the mission prefix so dashboard pre-seeding
+        // and Director-generated IDs stay in sync (VM-456 → VM-456-1, VM-456-2)
+        const missionId = envelope.id ?? nextMissionId();
 
         logger.info("Inbound mission received", {
           id: missionId,
