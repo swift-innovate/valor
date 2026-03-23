@@ -27,6 +27,8 @@ import type {
 import { formatTelegramAlert } from "./safety-gates.js";
 import { listAgents } from "../db/repositories/agent-repo.js";
 import { sendMessage, generateConversationId } from "../db/repositories/comms-repo.js";
+import { createMission } from "../db/repositories/mission-repo.js";
+import { getCardByCallsign } from "../db/repositories/agent-card-repo.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,6 +58,20 @@ function nextMissionId(prefix: string): string {
  */
 export function resetMissionCounter(): void {
   _missionCounter = 0;
+}
+
+// ---------------------------------------------------------------------------
+// Priority mapping
+// ---------------------------------------------------------------------------
+
+function mapPriority(natsPriority: MissionPriority): "critical" | "high" | "normal" | "low" {
+  switch (natsPriority) {
+    case "P0": return "critical";
+    case "P1": return "high";
+    case "P2": return "normal";
+    case "P3": return "low";
+    default: return "normal";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +189,41 @@ async function dispatchRoute(
 
   await publishMissionBrief(nc, "director", brief);
 
+  // Write DB record using NATS mission_id as the DB id
+  try {
+    const card = getCardByCallsign(routing.operative);
+    createMission(
+      {
+        division_id: null,
+        title: brief.title,
+        objective: brief.description,
+        status: "dispatched",
+        phase: null,
+        assigned_agent_id: card?.agent_id ?? null,
+        priority: mapPriority(brief.priority),
+        constraints: [],
+        deliverables: brief.acceptance_criteria,
+        success_criteria: brief.acceptance_criteria,
+        token_usage: null,
+        cost_usd: 0,
+        revision_count: 0,
+        max_revisions: 5,
+        parent_mission_id: null,
+        initiative_id: null,
+        dispatched_at: brief.created_at,
+        completed_at: null,
+      },
+      brief.mission_id,
+    );
+    logger.info("DB mission record created", { mission_id: brief.mission_id });
+  } catch (err) {
+    // Non-fatal — NATS dispatch already succeeded
+    logger.warn("Failed to create DB mission record", {
+      mission_id: brief.mission_id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   // Publish dispatch sitrep
   await publishSitrep(nc, "director", {
     mission_id: missionId,
@@ -253,6 +304,38 @@ async function dispatchDecompose(
     };
 
     await publishMissionBrief(nc, "director", brief);
+
+    try {
+      const card = getCardByCallsign(step.operative);
+      createMission(
+        {
+          division_id: null,
+          title: brief.title,
+          objective: brief.description,
+          status: "dispatched",
+          phase: null,
+          assigned_agent_id: card?.agent_id ?? null,
+          priority: mapPriority(brief.priority),
+          constraints: [],
+          deliverables: brief.acceptance_criteria,
+          success_criteria: brief.acceptance_criteria,
+          token_usage: null,
+          cost_usd: 0,
+          revision_count: 0,
+          max_revisions: 5,
+          parent_mission_id: brief.parent_mission,
+          initiative_id: null,
+          dispatched_at: brief.created_at,
+          completed_at: null,
+        },
+        brief.mission_id,
+      );
+    } catch (err) {
+      logger.warn("Failed to create DB mission record for sub-mission", {
+        mission_id: brief.mission_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   // Publish decomposition sitrep

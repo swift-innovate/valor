@@ -33,9 +33,10 @@ export class InvalidTransitionError extends Error {
 
 export function createMission(
   input: Omit<Mission, "id" | "created_at" | "updated_at">,
+  explicitId?: string,
 ): Mission {
   const now = new Date().toISOString();
-  const id = generateId();
+  const id = explicitId ?? generateId();
 
   getDb().execute(
     `INSERT INTO missions (id, division_id, title, objective, status, phase, assigned_agent_id,
