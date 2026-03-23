@@ -22,6 +22,9 @@ import type {
 import type { NatsSitrep } from "../nats/index.js";
 import { STREAM_NAMES } from "../nats/types.js";
 import { natsState } from "./nats-state.js";
+import { getMission, transitionMission } from "../db/repositories/mission-repo.js";
+import type { MissionStatus } from "../types/mission.js";
+import { logger } from "../utils/logger.js";
 
 function decode<T>(msg: Msg): VALORMessage<T> {
   return JSON.parse(new TextDecoder().decode(msg.data)) as VALORMessage<T>;
@@ -143,7 +146,9 @@ export class NATSSubscriber {
       callback: (_err, msg) => {
         if (_err) return;
         try {
-          natsState.handleSitrep(decode<NatsSitrep>(msg));
+          const envelope = decode<NatsSitrep>(msg);
+          natsState.handleSitrep(envelope);
+          this.syncSitrepToDb(envelope.payload);
         } catch (err) {
           console.error("[NATSSubscriber] Error processing sitrep:", err);
         }
@@ -151,6 +156,48 @@ export class NATSSubscriber {
     });
     this.subs.push(sub);
     console.log("[NATSSubscriber] Subscribed to valor.sitreps.>");
+  }
+
+  /**
+   * Sync a live sitrep to the DB mission record, if one exists.
+   * Non-fatal — natsState is the source of truth for the dashboard.
+   * Not called during JetStream hydration to avoid spurious transitions.
+   */
+  private syncSitrepToDb(sitrep: NatsSitrep): void {
+    const mission = getMission(sitrep.mission_id);
+    if (!mission) return; // No DB record for this mission — skip silently
+
+    let targetStatus: MissionStatus | null = null;
+    switch (sitrep.status) {
+      case "ACCEPTED":
+      case "IN_PROGRESS":
+        if (mission.status === "dispatched") targetStatus = "streaming";
+        break;
+      case "COMPLETE":
+        if (mission.status === "streaming" || mission.status === "dispatched") targetStatus = "complete";
+        break;
+      case "FAILED":
+        if (mission.status === "streaming" || mission.status === "dispatched") targetStatus = "failed";
+        break;
+      // BLOCKED has no direct DB mapping — leave status unchanged
+    }
+
+    if (!targetStatus) return;
+
+    try {
+      transitionMission(sitrep.mission_id, targetStatus);
+      logger.debug("DB mission status synced from sitrep", {
+        mission_id: sitrep.mission_id,
+        sitrep_status: sitrep.status,
+        db_status: targetStatus,
+      });
+    } catch (err) {
+      // Non-fatal — natsState is the source of truth for the dashboard
+      logger.warn("Failed to sync sitrep to DB", {
+        mission_id: sitrep.mission_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   /**
