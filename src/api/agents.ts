@@ -12,6 +12,8 @@ import {
 } from "../db/index.js";
 import { AgentRuntime } from "../types/index.js";
 import { requireDirector } from "../auth/index.js";
+import { currentConnection } from "../nats/client.js";
+import { publishHeartbeat } from "../nats/publishers.js";
 
 const VALID_RUNTIMES: AgentRuntime[] = [
   "openclaw",
@@ -122,6 +124,21 @@ agentRoutes.delete("/:id", (c) => {
 agentRoutes.post("/:id/heartbeat", (c) => {
   const agent = updateHeartbeat(c.req.param("id"));
   if (!agent) return c.json({ error: "Agent not found" }, 404);
+
+  // Mirror heartbeat to NATS so nats-state tracks operative as IDLE
+  const nc = currentConnection();
+  if (nc && agent.callsign) {
+    publishHeartbeat(nc, "agent-registry", {
+      operative: agent.callsign,
+      status: "IDLE",
+      current_mission: null,
+      tick_interval_ms: 0,
+      uptime_ms: 0,
+      last_activity: new Date().toISOString(),
+      metadata: null,
+    });
+  }
+
   return c.json(agent);
 });
 

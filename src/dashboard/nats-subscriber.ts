@@ -86,7 +86,32 @@ export class NATSSubscriber {
     try {
       const js = jetstream(this.nc);
 
-      // Ordered consumer — ephemeral, replays from beginning, no ack needed
+      // 1. Replay mission briefs first so missions have correct assigned_to/title
+      try {
+        const briefConsumer = await js.consumers.get(STREAM_NAMES.MISSIONS, {
+          deliver_policy: DeliverPolicy.All,
+        });
+        let briefCount = 0;
+        const briefIter = await briefConsumer.fetch({ max_messages: 1000, expires: 3000 });
+        for await (const msg of briefIter) {
+          try {
+            const envelope = JSON.parse(
+              new TextDecoder().decode(msg.data),
+            ) as VALORMessage<MissionBrief>;
+            if (envelope.type === "mission.brief") {
+              natsState.handleMissionBrief(envelope);
+              briefCount++;
+            }
+          } catch {
+            // Skip unparseable
+          }
+        }
+        console.log(`[NATSSubscriber] Hydrated ${briefCount} mission briefs from JetStream`);
+      } catch (err) {
+        console.warn("[NATSSubscriber] Mission brief hydration failed:", err instanceof Error ? err.message : err);
+      }
+
+      // 2. Replay sitreps to restore status/progress on top of the briefs
       const consumer = await js.consumers.get(STREAM_NAMES.SITREPS, {
         deliver_policy: DeliverPolicy.All,
       });

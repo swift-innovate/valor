@@ -199,7 +199,7 @@ class NATSStateManager {
         title: sitrep.mission_id,
         description: "",
         priority: "P2",
-        assigned_to: msg.source ?? "unknown",
+        assigned_to: sitrep.operative ?? msg.source ?? "unknown",
         status: "pending",
         progress_pct: null,
         created_at: msg.timestamp,
