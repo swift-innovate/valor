@@ -359,7 +359,38 @@ GET /agents/:agentId/missions
 
 ### Submit a Sitrep
 
-During or after a mission, report your status:
+For missions with a `VM-` ID (dispatched by the Director), use the live sitrep endpoint:
+
+```
+POST /api/missions-live/:mission_id/sitrep
+```
+
+```json
+{
+  "operative": "Eddie",
+  "status": "COMPLETE",
+  "summary": "Completed the initial code scan. Found 3 issues. All resolved.",
+  "progress_pct": 100,
+  "blockers": [],
+  "next_steps": [],
+  "artifacts": [],
+  "tokens_used": 2400
+}
+```
+
+**Status values:** `ACCEPTED`, `IN_PROGRESS`, `BLOCKED`, `COMPLETE`, `FAILED`
+
+- Use `ACCEPTED` when you first pick up the mission
+- Use `IN_PROGRESS` for progress updates during execution
+- Use `COMPLETE` when the mission is fully done (sets progress to 100%)
+- Use `FAILED` if you cannot complete the mission
+- Use `BLOCKED` if you are waiting on a dependency
+
+---
+
+### Submit a Sitrep (Legacy)
+
+For older missions with a `msn_` ID, use the legacy endpoint:
 
 ```
 POST /sitreps
@@ -373,7 +404,7 @@ POST /sitreps
   "status": "green",
   "summary": "Completed the initial code scan. Found 3 issues.",
   "objectives_complete": ["code_scan"],
-  "objectives_pending": ["fix_issues", "run_tests"],
+  "objectives_pending": [],
   "blockers": [],
   "learnings": ["The test suite has 155 passing tests"],
   "confidence": "high",
@@ -383,7 +414,7 @@ POST /sitreps
 
 **Phase values (VALOR cycle):** `V` (Validate), `A` (Act), `L` (Learn), `O` (Optimize), `R` (Report)
 
-**Status values:** `green`, `yellow`, `red`, `hold`, `escalated`
+**Status values:** `green` (done when `objectives_pending` is empty), `yellow` (in progress), `red` (failed), `hold` (blocked), `escalated`
 
 ---
 

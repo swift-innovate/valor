@@ -336,6 +336,59 @@ missionsLiveRoutes.post("/:id/reassign", async (c) => {
   });
 });
 
+// ── POST /api/missions-live/:id/sitrep ───────────────────────────────
+// NATS-native sitrep submission. Agents that speak the NATS format use this.
+// Simpler path: callsign + status + summary (no agent_id / phase / DB lookup needed).
+
+missionsLiveRoutes.post("/:id/sitrep", async (c) => {
+  const mission_id = c.req.param("id");
+  const body = await c.req.json();
+
+  const { operative, status, summary, progress_pct, blockers, next_steps, artifacts, tokens_used } = body;
+
+  if (!operative || !status || !summary) {
+    return c.json({ error: "operative, status, and summary are required" }, 400);
+  }
+
+  const validStatuses = ["ACCEPTED", "IN_PROGRESS", "BLOCKED", "COMPLETE", "FAILED"];
+  if (!validStatuses.includes(status)) {
+    return c.json({ error: `status must be one of: ${validStatuses.join(", ")}` }, 400);
+  }
+
+  const nc = currentConnection();
+  const sitrep: NatsSitrep = {
+    mission_id,
+    operative,
+    status,
+    progress_pct: progress_pct ?? (status === "COMPLETE" ? 100 : null),
+    summary,
+    artifacts: artifacts ?? [],
+    blockers: blockers ?? [],
+    next_steps: next_steps ?? [],
+    tokens_used: tokens_used ?? null,
+    timestamp: new Date().toISOString(),
+  };
+
+  if (nc) {
+    try {
+      await publishSitrep(nc, operative, sitrep);
+    } catch (err) {
+      console.error("[missions-live] sitrep publish failed:", err);
+    }
+  }
+
+  // Also update local state directly for immediate dashboard refresh
+  natsState.handleSitrep({
+    id: `${mission_id}-${Date.now()}`,
+    timestamp: sitrep.timestamp,
+    source: operative,
+    type: "sitrep",
+    payload: sitrep,
+  });
+
+  return c.json({ mission_id, status, message: "Sitrep accepted" }, 201);
+});
+
 // ── POST /api/missions-live/:id/archive ──────────────────────────────
 
 missionsLiveRoutes.post("/:id/archive", (c) => {
