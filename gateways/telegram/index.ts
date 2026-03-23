@@ -343,7 +343,30 @@ async function main(): Promise<void> {
     }),
   );
 
-  console.log("[TelegramGateway] Subscribed to sitreps, verdicts, system events");
+  // Direct Telegram notifications from nats-subscriber (mission dispatch, etc.)
+  subs.push(
+    nc.subscribe("valor.telegram.notify", {
+      callback: (_err, msg) => {
+        if (_err || !principalChatId) return;
+        try {
+          const payload = JSON.parse(new TextDecoder().decode(msg.data)) as {
+            to: string;
+            text: string;
+            parse_mode?: string;
+          };
+          // Only forward messages addressed to the principal
+          if (payload.to !== "principal") return;
+          bot
+            .sendMessage(principalChatId, payload.text, {
+              parse_mode: (payload.parse_mode as "Markdown" | "HTML") ?? undefined,
+            })
+            .catch(() => {});
+        } catch { /* ignore parse errors */ }
+      },
+    }),
+  );
+
+  console.log("[TelegramGateway] Subscribed to sitreps, verdicts, system events, telegram.notify");
   console.log(`[TelegramGateway] Ready. Principal ID: ${PRINCIPAL_ID}`);
 
   // ── Graceful Shutdown ────────────────────────────────────────────────

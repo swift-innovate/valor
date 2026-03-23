@@ -99,13 +99,17 @@ Do not rely on the agent "remembering" the conversation_id or event_id from cont
 
 **Alternative: WebSocket.** If you can maintain a persistent WebSocket connection, connect to `ws://<engine-host>:3200/ws` and filter for `comms.message` events where the target matches your agent ID. This avoids polling entirely but requires a long-lived connection.
 
-## Base URL
+## VALOR Server
 
-Use the engine's hostname — not `localhost` unless you're running on the same machine.
+All API endpoints are relative to the VALOR engine base URL:
 
 ```
 http://<engine-host>:3200
 ```
+
+Default on the local network: `http://192.168.1.x:3200` — ask the Director for the actual IP if unknown. For local testing: `http://localhost:3200`.
+
+Use the engine's hostname — not `localhost` unless you're running on the same machine.
 
 All requests use `Content-Type: application/json`.
 

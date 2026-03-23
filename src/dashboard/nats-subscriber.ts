@@ -147,11 +147,32 @@ export class NATSSubscriber {
   private subscribeMissions(): void {
     if (!this.nc) return;
 
-    const sub = this.nc.subscribe("valor.missions.*.pending", {
+    const nc = this.nc;
+
+    const sub = nc.subscribe("valor.missions.*.pending", {
       callback: (_err, msg) => {
         if (_err) return;
         try {
-          natsState.handleMissionBrief(decode<MissionBrief>(msg));
+          const envelope = decode<MissionBrief>(msg);
+          natsState.handleMissionBrief(envelope);
+
+          // Notify the Principal via Telegram gateway (non-fatal)
+          try {
+            const brief = envelope.payload;
+            const notifyPayload = {
+              to: "principal",
+              text: `📋 Mission dispatched\n*${brief.mission_id}* → ${brief.assigned_to}\n${brief.title}\n\n${brief.description?.slice(0, 200) || ""}`,
+              parse_mode: "Markdown",
+            };
+            nc.publish(
+              "valor.telegram.notify",
+              new TextEncoder().encode(JSON.stringify(notifyPayload)),
+            );
+          } catch (notifyErr) {
+            logger.warn("[NATSSubscriber] Failed to publish Telegram notify", {
+              error: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
+            });
+          }
         } catch (err) {
           console.error("[NATSSubscriber] Error processing mission brief:", err);
         }
