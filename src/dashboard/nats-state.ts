@@ -36,6 +36,7 @@ export interface DashboardMission {
   artifacts: string[];
   blockers: string[];
   latest_sitrep: string | null;
+  last_sitrep_at: string | null;
 }
 
 /**
@@ -164,6 +165,7 @@ class NATSStateManager {
       artifacts: [],
       blockers: [],
       latest_sitrep: null,
+      last_sitrep_at: null,
     };
 
     this.missions.set(brief.mission_id, mission);
@@ -206,6 +208,7 @@ class NATSStateManager {
         artifacts: [],
         blockers: [],
         latest_sitrep: null,
+        last_sitrep_at: null,
       };
       this.missions.set(sitrep.mission_id, mission);
     }
@@ -241,6 +244,7 @@ class NATSStateManager {
     }
 
     mission.latest_sitrep = sitrep.summary;
+    mission.last_sitrep_at = msg.timestamp;
 
     // Track sitrep history
     if (!this.sitrepHistory.has(sitrep.mission_id)) {

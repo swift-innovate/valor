@@ -154,6 +154,10 @@ natsSubscriber.start(natsUrl).catch((err) => {
   logger.warn("NATS subscriber failed to start - dashboard will not have real-time updates", { error: err.message });
 });
 
+// Start mission timeout monitor
+import { missionTimeoutMonitor } from "./monitors/mission-timeout.js";
+missionTimeoutMonitor.start();
+
 const server = serve({ fetch: app.fetch, port: config.port }, () => {
   logger.info("VALOR engine started", {
     port: config.port,
@@ -170,6 +174,7 @@ async function shutdown() {
   logger.info("Shutting down...");
   closeWebSocket();
   stopHealthMonitor();
+  missionTimeoutMonitor.stop();
   await natsSubscriber.stop();
   server.close();
   closeDb();
