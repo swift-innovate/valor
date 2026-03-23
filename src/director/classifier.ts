@@ -521,7 +521,10 @@ export async function classifyMission(
 
     if (nc) {
       const summary = buildProgressSummary(gear1Output, "");
-      await sendProgressUpdate(nc, mid, "COMPLETE", summary);
+      // ROUTE/DECOMPOSE/TASK: parent stays active — operatives still have work to do.
+      // CONVERSATION/ESCALATE: Director handled it directly — parent is truly done.
+      const dispatching = ["ROUTE", "DECOMPOSE", "TASK"].includes(gear1Output.decision);
+      await sendProgressUpdate(nc, mid, dispatching ? "IN_PROGRESS" : "COMPLETE", summary);
     }
 
     return {
@@ -564,7 +567,8 @@ export async function classifyMission(
 
     if (nc) {
       const summary = buildProgressSummary(gear2Output, " (Gear 2)");
-      await sendProgressUpdate(nc, mid, "COMPLETE", summary);
+      const dispatching = ["ROUTE", "DECOMPOSE", "TASK"].includes(gear2Output.decision);
+      await sendProgressUpdate(nc, mid, dispatching ? "IN_PROGRESS" : "COMPLETE", summary);
     }
 
     return {
