@@ -9,11 +9,13 @@ import {
   deleteAgent,
   listMissions,
   getAgentDivisions,
+  getAgentInbox,
 } from "../db/index.js";
 import { AgentRuntime } from "../types/index.js";
 import { requireDirector } from "../auth/index.js";
 import { currentConnection } from "../nats/client.js";
 import { publishHeartbeat } from "../nats/publishers.js";
+import { natsState } from "../dashboard/nats-state.js";
 
 const VALID_RUNTIMES: AgentRuntime[] = [
   "openclaw",
@@ -32,6 +34,31 @@ agentRoutes.get("/", (c) => {
 
   const agents = listAgents({ division_id, health_status });
   return c.json(agents);
+});
+
+// ── Unified agent inbox ──────────────────────────────────────────────
+// Single polling endpoint: heartbeat + missions + directives + comms
+agentRoutes.get("/:id/inbox", (c) => {
+  const id = c.req.param("id");
+  const agent = getAgent(id);
+  if (!agent) return c.json({ error: "Agent not found" }, 404);
+
+  // Implicit heartbeat — polling IS the heartbeat
+  updateHeartbeat(id);
+
+  const since = c.req.query("since") || undefined;
+  const callsign = agent.callsign;
+
+  const pending_missions = natsState.getMissions({ operative: callsign, status: "pending" });
+  const directives = natsState.drainDirectives(callsign);
+  const messages = getAgentInbox(id, { since, limit: undefined });
+
+  return c.json({
+    heartbeat_at: new Date().toISOString(),
+    pending_missions,
+    directives,
+    messages,
+  });
 });
 
 // Get single agent

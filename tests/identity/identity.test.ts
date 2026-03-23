@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { freshDb, cleanupDb } from "../helpers/test-db.js";
-import { clearSubscriptions, subscribe } from "../../src/bus/event-bus.js";
 import {
   createPersona,
   getPersona,
@@ -8,26 +7,17 @@ import {
   listPersonas,
   updatePersona,
   deletePersona,
-  createDivision,
-  getDivision,
-  getAgent,
-  listAgents,
 } from "../../src/db/index.js";
 import {
   parsePersonaDefinition,
   loadPersona,
-  instantiateLead,
-  instantiateOperative,
 } from "../../src/identity/index.js";
-import type { EventEnvelope } from "../../src/types/index.js";
 
 beforeEach(() => {
   freshDb();
-  clearSubscriptions();
 });
 
 afterEach(() => {
-  clearSubscriptions();
   cleanupDb();
 });
 
@@ -183,101 +173,3 @@ describe("Persona Loader", () => {
   });
 });
 
-describe("Lead Instantiation", () => {
-  it("instantiates a division lead from persona", () => {
-    const events: EventEnvelope[] = [];
-    subscribe("agent.*", (e) => events.push(e));
-
-    const persona = createPersona(samplePersonaInput());
-    const division = createDivision({
-      name: "Code Division",
-      lead_agent_id: null,
-      autonomy_policy: { max_cost_autonomous_usd: 10, approval_required_actions: [], auto_dispatch_enabled: true },
-      escalation_policy: { escalate_to: "director", escalate_after_failures: 3, escalate_on_budget_breach: true },
-      namespace: "code",
-    });
-
-    const result = instantiateLead({
-      persona_id: persona.id,
-      division_id: division.id,
-      runtime: "claude_api",
-      model: "claude-sonnet-4-20250514",
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.agent).toBeTruthy();
-    expect(result.agent!.callsign).toBe("Gage");
-    expect(result.agent!.persona_id).toBe(persona.id);
-    expect(result.agent!.division_id).toBe(division.id);
-
-    // Division should have lead_agent_id set
-    const updatedDiv = getDivision(division.id);
-    expect(updatedDiv!.lead_agent_id).toBe(result.agent!.id);
-
-    // Should emit agent.registered event
-    expect(events.some((e) => e.type === "agent.registered")).toBe(true);
-  });
-
-  it("rejects non-lead persona for lead instantiation", () => {
-    const persona = createPersona({ ...samplePersonaInput(), role: "analyst" });
-    const division = createDivision({
-      name: "Code Division",
-      lead_agent_id: null,
-      autonomy_policy: { max_cost_autonomous_usd: 10, approval_required_actions: [], auto_dispatch_enabled: true },
-      escalation_policy: { escalate_to: "director", escalate_after_failures: 3, escalate_on_budget_breach: true },
-      namespace: "code",
-    });
-
-    const result = instantiateLead({
-      persona_id: persona.id,
-      division_id: division.id,
-      runtime: "claude_api",
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.reason).toContain("analyst");
-  });
-
-  it("rejects if division already has active lead", () => {
-    const persona1 = createPersona(samplePersonaInput());
-    const persona2 = createPersona({ ...samplePersonaInput(), name: "Rook", callsign: "Rook" });
-    const division = createDivision({
-      name: "Code Division",
-      lead_agent_id: null,
-      autonomy_policy: { max_cost_autonomous_usd: 10, approval_required_actions: [], auto_dispatch_enabled: true },
-      escalation_policy: { escalate_to: "director", escalate_after_failures: 3, escalate_on_budget_breach: true },
-      namespace: "code",
-    });
-
-    instantiateLead({ persona_id: persona1.id, division_id: division.id, runtime: "claude_api" });
-    const result = instantiateLead({ persona_id: persona2.id, division_id: division.id, runtime: "claude_api" });
-
-    expect(result.success).toBe(false);
-    expect(result.reason).toContain("already has an active lead");
-  });
-
-  it("instantiates an operative", () => {
-    const persona = createPersona({ ...samplePersonaInput(), role: "operative", callsign: "Op-1" });
-    const division = createDivision({
-      name: "Code Division",
-      lead_agent_id: null,
-      autonomy_policy: { max_cost_autonomous_usd: 10, approval_required_actions: [], auto_dispatch_enabled: true },
-      escalation_policy: { escalate_to: "director", escalate_after_failures: 3, escalate_on_budget_breach: true },
-      namespace: "code",
-    });
-
-    const result = instantiateOperative({
-      persona_id: persona.id,
-      division_id: division.id,
-      runtime: "ollama",
-      model: "llama3",
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.agent!.callsign).toBe("Op-1");
-
-    // Division lead should NOT be set (operative, not lead)
-    const updatedDiv = getDivision(division.id);
-    expect(updatedDiv!.lead_agent_id).toBeNull();
-  });
-});

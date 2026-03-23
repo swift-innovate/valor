@@ -56,6 +56,7 @@ const { values: args } = parseArgs({
     nats: { type: "string", default: "nats://localhost:4222" },
     model: { type: "string", default: "qwen3:latest" },
     ollama: { type: "string", default: "http://starbase:40114" },
+    "valor-url": { type: "string", default: "http://localhost:3200" },
     "heartbeat-interval": { type: "string", default: "30000" },
   },
   allowPositionals: false,
@@ -64,6 +65,7 @@ const { values: args } = parseArgs({
 const NATS_URL = args.nats ?? "nats://localhost:4222";
 const DEFAULT_MODEL = args.model ?? "qwen3:latest";
 const OLLAMA_BASE_URL = args.ollama ?? "http://starbase:40114";
+const VALOR_BASE_URL = args["valor-url"] ?? "http://localhost:3200";
 const HEARTBEAT_INTERVAL_MS = parseInt(args["heartbeat-interval"] ?? "30000", 10);
 const ANALYST_CALLSIGN = "analyst";
 
@@ -141,25 +143,48 @@ function selectAnalystModel(operativeModelTier: string | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
-// Brief retrieval (stub — Phase 1 reads from NATS/file)
+// Brief retrieval via VALOR API
 // ---------------------------------------------------------------------------
 
 /**
- * Retrieve the original MissionBrief for a submission.
+ * Retrieve the original MissionBrief for a submission by calling the
+ * VALOR dashboard API (GET /api/missions-live/:id).
  *
- * Phase 1 stub: attempts to read from a local brief cache populated by the
- * Director when it dispatches missions. In a full implementation this would
- * query the mission store or a durable NATS KV bucket.
+ * The API returns a DashboardMission object which is mapped to MissionBrief.
+ * Fields not present in DashboardMission (depends_on, model_tier,
+ * acceptance_criteria, context_refs, deadline) are defaulted.
  */
 async function getMissionBrief(
   missionId: string,
 ): Promise<MissionBrief | null> {
-  // Phase 1 stub — return a minimal brief so review can proceed.
-  // Real implementation: query Director's mission store or NATS KV.
-  logger.debug("Brief lookup (stub)", { mission_id: missionId });
-
-  // Return null — verdicts.ts handles missing brief gracefully
-  return null;
+  try {
+    const res = await fetch(`${VALOR_BASE_URL}/api/missions-live/${missionId}`);
+    if (!res.ok) {
+      logger.warn("Brief lookup failed", { mission_id: missionId, status: res.status });
+      return null;
+    }
+    const data = await res.json() as Record<string, unknown>;
+    return {
+      mission_id: (data.mission_id as string) ?? missionId,
+      title: (data.title as string) ?? missionId,
+      description: (data.description as string) ?? "",
+      priority: (data.priority as MissionBrief["priority"]) ?? "P2",
+      assigned_to: (data.assigned_to as string) ?? "",
+      depends_on: [],
+      parent_mission: (data.parent_mission as string | null) ?? null,
+      model_tier: "balanced" as MissionBrief["model_tier"],
+      acceptance_criteria: [],
+      context_refs: [],
+      deadline: null,
+      created_at: (data.created_at as string) ?? new Date().toISOString(),
+    };
+  } catch (err) {
+    logger.warn("Brief lookup error", {
+      mission_id: missionId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -432,6 +457,7 @@ async function main(): Promise<void> {
     nats: NATS_URL,
     default_model: DEFAULT_MODEL,
     ollama: OLLAMA_BASE_URL,
+    valor_url: VALOR_BASE_URL,
     max_retries: MAX_RETRIES,
   });
 
