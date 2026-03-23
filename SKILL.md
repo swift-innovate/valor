@@ -3,6 +3,9 @@
 > This document tells an AI agent how to interact with a running VALOR engine.
 > If you are working on the VALOR codebase itself, read `CLAUDE.md` instead.
 
+> **New here?** Start with the [Agent Quickstart Guide](docs/agent-quickstart.md) for a 5-minute setup.
+> This document is the full reference — read it after you're connected.
+
 ## Quick Start
 
 VALOR engine runs as an HTTP server. Default port: **3200**.

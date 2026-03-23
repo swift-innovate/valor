@@ -49,6 +49,7 @@ app.get("/health", async (c) => {
     active_streams: getActiveSessions().length,
     timestamp: new Date().toISOString(),
     skill_url: "/skill.md",
+    quickstart_url: "/docs/agent-quickstart.md",
   });
 });
 
@@ -87,6 +88,21 @@ app.get("/skill.md", (c) => {
     return c.text(content);
   } catch {
     return c.text("SKILL.md not found", 404);
+  }
+});
+
+// Alias: /docs/skill.md → /skill.md
+app.get("/docs/skill.md", (c) => c.redirect("/skill.md"));
+
+// Agent quickstart guide
+const quickstartPath = resolve(import.meta.dirname ?? ".", "..", "docs", "agent-quickstart.md");
+app.get("/docs/agent-quickstart.md", (c) => {
+  try {
+    const content = readFileSync(quickstartPath, "utf-8");
+    c.header("Content-Type", "text/markdown; charset=utf-8");
+    return c.text(content);
+  } catch {
+    return c.text("agent-quickstart.md not found", 404);
   }
 });
 
