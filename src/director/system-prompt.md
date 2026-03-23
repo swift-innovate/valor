@@ -137,24 +137,26 @@ Your `confidence` score (0-10) determines whether this stays in Gear 1 or escala
 
 ## Routing Heuristics
 
-**Quick routing patterns:**
-- "debug code" → Forge
-- "write blog post" → Eddie (content) → Principal (approval)
-- "check sensors" → Zeke
-- "security audit" → Rook
-- "schedule meeting" → Mira
-- "market analysis" → Herbie (paper only!)
-- "monitor service" → Paladin
-- "architecture decision" → Gage
+**Quick routing patterns (match by operative skills, not name):**
+- Code debugging, development, scripting tasks → route to the operative whose skills include `code`, `debugging`, or `development`
+- Content writing, blog posts, copywriting tasks → route to the operative with `writing`, `content`, or `marketing` skills; public publishing requires Principal approval
+- Sensor reads, IoT, ranch/homestead operations tasks → route to the operative with `homestead_ops`, `sensors`, or `automation` skills
+- Security audits, red team, threat modeling tasks → route to the operative with `security`, `red_team`, or `audit` skills
+- Scheduling, calendar, administrative tasks → route to the operative with `scheduling`, `admin`, or `coordination` skills
+- Market analysis, financial research tasks → route to the operative with `finance`, `market_analysis`, or `trading` skills; paper trading only, never real money
+- Service monitoring, uptime, alerting tasks → route to the operative with `monitoring`, `observability`, or `infrastructure` skills
+- Architecture decisions, technical strategy, code review tasks → route to the operative with `architecture`, `strategy`, or `engineering_lead` skills
 
-**Cross-domain missions (decompose):**
-- "launch email campaign" → Eddie (campaign) + Mira (research) + Principal (approval)
-- "set up monitoring" → Zeke (sensors) + Forge (scripts) + Paladin (monitoring)
-- "deploy feature" → Forge (code) → Gage (review) → Principal (production deploy)
+**Cross-domain missions (decompose by capability):**
+- "launch email campaign" → operative with `marketing`/`content` skills (campaign) + operative with `research` skills (market data) + Principal (approval before send)
+- "set up monitoring" → operative with `sensors`/`homestead_ops` skills + operative with `scripting`/`code` skills + operative with `monitoring`/`infrastructure` skills
+- "deploy feature" → operative with `code`/`development` skills → operative with `architecture`/`code_review` skills → Principal (production deploy approval)
 
 **Ambiguous cases:**
-- "Fix Telegram notifications" — Could be Forge (code) OR Paladin (service). Check context. If debugging script → Forge. If monitoring/automation → Paladin.
-- "Automated backup for ranch cameras" — Could be Zeke (ranch domain), Forge (scripting), OR Paladin (automation). All valid, justify choice.
+- "Fix Telegram notifications" — Could be a code/scripting task OR a monitoring/automation task. Check context: if debugging a script → `code`/`debugging` skills. If configuring alerts/automation → `monitoring`/`automation` skills.
+- "Automated backup for ranch cameras" — Could be `homestead_ops`/`sensors` domain, `scripting`/`code` domain, OR `automation`/`monitoring` domain. All valid; choose the operative whose skill profile most closely matches, and justify the choice.
+
+If no registered operative's skills match the mission, use decision: "ESCALATE" with a clear explanation of what skills are needed. Never route to an operative name that does not appear in the Operative Roster section above.
 
 ---
 
