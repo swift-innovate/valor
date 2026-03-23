@@ -22,6 +22,14 @@ set -euo pipefail
 VALOR_DIR="${VALOR_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 cd "$VALOR_DIR"
 
+# Load .env if present
+if [ -f "$VALOR_DIR/.env" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$VALOR_DIR/.env"
+  set +a
+fi
+
 NATS_URL="${NATS_URL:-nats://localhost:4222}"
 OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://starbase:40114}"
 DIRECTOR_MODEL="${DIRECTOR_MODEL:-gemma3:27b}"
@@ -75,10 +83,33 @@ NATS_URL="$NATS_URL" LOG_LEVEL=warn node --import tsx scripts/ensure-streams.ts 
 echo "  ✓ Streams ready"
 
 # ---------------------------------------------------------------------------
-# 3. Director Service
+# 3. VALOR Engine Server (dashboard + API)
 # ---------------------------------------------------------------------------
 echo ""
-echo "── Step 3: Director Service ──"
+echo "── Step 3: VALOR Engine Server ──"
+
+if pgrep -f "src/index.ts" &>/dev/null; then
+  echo "  ✓ VALOR server already running"
+else
+  echo "  Starting VALOR server..."
+  nohup node --import tsx src/index.ts \
+    > "$LOG_DIR/server.log" 2>&1 &
+  echo $! > "$LOG_DIR/server.pid"
+  sleep 4
+
+  if pgrep -f "src/index.ts" &>/dev/null; then
+    echo "  ✓ VALOR server started (PID $(cat "$LOG_DIR/server.pid"))"
+  else
+    echo "  ✗ VALOR server failed to start — check $LOG_DIR/server.log"
+    exit 1
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 4. Director Service
+# ---------------------------------------------------------------------------
+echo ""
+echo "── Step 4: Director Service ──"
 
 if pgrep -f "director-service.ts" &>/dev/null; then
   echo "  ✓ Director already running"
@@ -103,10 +134,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4. Operative Consumers (dynamic — discovered from agent cards)
+# 5. Operative Consumers (dynamic — discovered from agent cards)
 # ---------------------------------------------------------------------------
 echo ""
-echo "── Step 4: Operative Consumers ──"
+echo "── Step 5: Operative Consumers ──"
 
 VALOR_PORT="${VALOR_PORT:-3200}"
 VALOR_API="http://localhost:${VALOR_PORT}/api/agent-cards?status=approved"
@@ -155,10 +186,10 @@ for OP in $REGISTERED_OPERATIVES; do
 done
 
 # ---------------------------------------------------------------------------
-# 5. Telegram Gateway
+# 6. Telegram Gateway
 # ---------------------------------------------------------------------------
 echo ""
-echo "── Step 5: Telegram Gateway ──"
+echo "── Step 6: Telegram Gateway ──"
 
 if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
   echo "  ⚠ TELEGRAM_BOT_TOKEN not set — skipping gateway"
@@ -184,7 +215,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6. Health Check
+# 7. Health Check
 # ---------------------------------------------------------------------------
 echo ""
 echo "── Health Check ──"
@@ -201,6 +232,14 @@ if curl -s --connect-timeout 3 "$OLLAMA_BASE_URL/api/tags" &>/dev/null; then
   echo "  ✓ Ollama: reachable at $OLLAMA_BASE_URL"
 else
   echo "  ⚠ Ollama: not reachable at $OLLAMA_BASE_URL (Director will fail on LLM calls)"
+fi
+
+# VALOR Server / Dashboard
+VALOR_PORT="${VALOR_PORT:-3200}"
+if curl -s --connect-timeout 3 "http://localhost:${VALOR_PORT}/health" &>/dev/null; then
+  echo "  ✓ VALOR server: http://localhost:${VALOR_PORT}/dashboard"
+else
+  echo "  ✗ VALOR server: not responding on :${VALOR_PORT}"
 fi
 
 # Director
@@ -231,9 +270,10 @@ echo ""
 echo "╔══════════════════════════════════════════════╗"
 echo "║         VALOR Engine — Running               ║"
 echo "╠══════════════════════════════════════════════╣"
-echo "║  Logs:     $LOG_DIR/"
-echo "║  NATS:     $NATS_URL"
-echo "║  Director: valor.missions.inbound"
+echo "║  Dashboard: http://localhost:${VALOR_PORT}/dashboard"
+echo "║  Logs:      $LOG_DIR/"
+echo "║  NATS:      $NATS_URL"
+echo "║  Director:  valor.missions.inbound"
 echo "║  Consumers: $REGISTERED_OPERATIVES"
 echo "╚══════════════════════════════════════════════╝"
 echo ""

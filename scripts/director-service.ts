@@ -200,6 +200,14 @@ async function main(): Promise<void> {
     gear2_model: config.directorGear2Model,
   });
 
+  // Periodic health check — every 60 seconds
+  setInterval(async () => {
+    const healthy = await checkOllamaHealth();
+    if (!healthy) {
+      logger.warn("Ollama health check failed — Director will retry on next mission");
+    }
+  }, 60_000);
+
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     if (isShuttingDown) return;

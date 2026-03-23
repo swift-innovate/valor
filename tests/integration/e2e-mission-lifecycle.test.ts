@@ -12,6 +12,8 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { freshDb, cleanupDb } from "../helpers/test-db.js";
+import { submitCard, approveCard } from "../../src/db/repositories/agent-card-repo.js";
 
 // ---------------------------------------------------------------------------
 // Mock the LLM adapter BEFORE any Director imports
@@ -151,6 +153,57 @@ const RESPONSES = {
   }),
 };
 
+const SEEDED_AGENT_CARDS = [
+  {
+    callsign: "forge",
+    name: "Forge — Code Operative",
+    operator: "SIT",
+    primary_skills: ["code_debugging", "typescript", "mission_dispatch"],
+    runtime: "claude_api" as const,
+    model: "claude-sonnet-4-20250514",
+    endpoint_url: null,
+    description: "Code operative for debugging, implementation, and mission execution.",
+  },
+  {
+    callsign: "mira",
+    name: "Mira — Research and Coordination",
+    operator: "SIT",
+    primary_skills: ["research", "coordination", "documentation"],
+    runtime: "openclaw" as const,
+    model: null,
+    endpoint_url: null,
+    description: "Chief of Staff responsible for research, coordination, and cross-domain planning.",
+  },
+  {
+    callsign: "eddie",
+    name: "Eddie — Content and Campaigns",
+    operator: "SIT",
+    primary_skills: ["content", "campaigns", "planning"],
+    runtime: "openclaw" as const,
+    model: null,
+    endpoint_url: null,
+    description: "SIT operative for content drafting, campaigns, and planning artifacts.",
+  },
+  {
+    callsign: "gage",
+    name: "Gage — Architecture and Review",
+    operator: "SIT",
+    primary_skills: ["architecture", "code_review", "system_design"],
+    runtime: "claude_api" as const,
+    model: "claude-sonnet-4-20250514",
+    endpoint_url: null,
+    description: "Code division lead for architecture, review, and strategic technical decisions.",
+  },
+] as const;
+
+function seedApprovedOperatives(): void {
+  for (const card of SEEDED_AGENT_CARDS) {
+    const submitted = submitCard(card);
+    const approved = approveCard(submitted.id, "director");
+    expect(approved?.approval_status).toBe("approved");
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Test infrastructure
 // ---------------------------------------------------------------------------
@@ -191,12 +244,15 @@ function sleep(ms: number): Promise<void> {
 describe("E2E Mission Lifecycle (VM-017)", () => {
   beforeAll(async () => {
     await startNatsServer();
+    freshDb();
+    seedApprovedOperatives();
     const nc = await getNatsConnection({ servers: [NATS_URL], name: "e2e-test" });
     await ensureStreams(nc);
   }, 30000);
 
   afterAll(async () => {
     await closeNatsConnection();
+    cleanupDb();
     if (natsProcess) { natsProcess.kill("SIGTERM"); natsProcess = null; }
   }, 15000);
 

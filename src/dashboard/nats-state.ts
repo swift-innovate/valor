@@ -146,6 +146,10 @@ class NATSStateManager {
    */
   handleMissionBrief(msg: VALORMessage<MissionBrief>): void {
     const brief = msg.payload;
+
+    // Don't resurrect missions that have already been archived
+    if (this.archivedMissions.has(brief.mission_id)) return;
+
     const mission: DashboardMission = {
       mission_id: brief.mission_id,
       title: brief.title,
@@ -183,6 +187,9 @@ class NATSStateManager {
     let mission = this.missions.get(sitrep.mission_id);
 
     if (!mission) {
+      // Don't resurrect missions that have already been archived
+      if (this.archivedMissions.has(sitrep.mission_id)) return;
+
       // Create stub mission from sitrep (happens during hydration or if
       // the dashboard missed the original MissionBrief)
       mission = {

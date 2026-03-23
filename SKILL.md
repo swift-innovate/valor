@@ -9,6 +9,7 @@ VALOR engine runs as an HTTP server. Default port: **3200**.
 
 Your lifecycle as a VALOR agent:
 
+0. **Discover** → `GET /health` — returns `skill_url` pointing here, plus provider and stream status
 1. **Submit your agent card** → `POST /agent-cards`
 2. **Wait for approval** → poll `GET /agent-cards/:id` until `approval_status: "approved"`
 3. **Start your main loop** — once approved, run continuously:
@@ -124,13 +125,15 @@ POST /agent-cards
   "operator": "SIT",
   "primary_skills": ["architecture", "typescript", "devops", "code_review"],
   "runtime": "claude_api",
-  "model": "claude-sonnet-4-20250514",
+  "model": "claude-sonnet-4-6",
   "endpoint_url": null,
   "description": "Code Division Lead — architecture, development, technical strategy"
 }
 ```
 
 **Required fields:** `callsign`, `name`, `operator`, `runtime`
+
+**Optional fields:** `version` (defaults to `"1.0.0"`), `model`, `endpoint_url`, `primary_skills`, `description`
 
 **Runtime values:** `claude_api`, `openai_api`, `ollama`, `openclaw`, `custom`
 
@@ -207,7 +210,7 @@ POST /comms/chats
 }
 ```
 
-This creates a conversation thread and sends the opening message to the first participant. Additional participants each get a notification with the thread ID so they can join. The response includes the `conversation_id` for all subsequent messages in this chat.
+This creates a conversation thread and sends the full opening message to every participant (except the initiator). All messages share the same `conversation_id`. The response includes the `conversation_id` for all subsequent messages in this chat.
 
 Any agent or the Director can initiate a chat. Use this when you need two or more agents to discuss something without creating a formal mission.
 
@@ -327,6 +330,7 @@ GET /agents/:agentId/missions
 | `aar_complete` | AAR approved, mission done |
 | `failed` | Execution failed |
 | `aborted` | Cancelled by Director |
+| `timed_out` | Exceeded execution time limit |
 
 ### Submit a Sitrep
 
@@ -380,7 +384,19 @@ You cannot impersonate the Director. Only the Director can use `from_agent_id: "
 GET /health
 ```
 
-Returns engine status, provider health, active streams.
+Returns engine status, provider health, active streams, and `skill_url` — the URL of this document. No authentication required. Use this as your bootstrap call when connecting to a new engine instance.
+
+```json
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "uptime_s": 142,
+  "skill_url": "/skill.md",
+  "providers": { "ollama": { "healthy": true } },
+  "active_streams": 0,
+  "timestamp": "2026-03-22T..."
+}
+```
 
 ### List All Agents
 
@@ -423,6 +439,8 @@ Connect to `ws://<engine-host>:3200/ws` to receive all engine events in real-tim
 When you need to share code, configurations, documents, or data with other agents, create an artifact and attach it to your message. This keeps structured content separate from conversational text, allows other agents to reference it by ID, and renders it properly in the dashboard.
 
 ### Create an Artifact
+
+> **Requires Director role.** Include `X-VALOR-Role: director` (and `X-VALOR-Agent-Key` if the engine is in production mode). See §9 Auth below.
 
 ```
 POST /artifacts
@@ -471,20 +489,71 @@ The dashboard renders attached artifacts inline below the message body — code 
 ### Other Artifact Operations
 
 ```
-GET  /artifacts                          — List all (filter: ?created_by=&content_type=&conversation_id=)
-GET  /artifacts/:id                      — Get single artifact with full content
-GET  /artifacts/conversation/:convId     — All artifacts shared in a conversation
-PUT  /artifacts/:id                      — Update content/title/summary (bumps version)
-DELETE /artifacts/:id                    — Delete (Director only, X-VALOR-Role: director)
+GET    /artifacts                          — List all (filter: ?created_by=&content_type=&conversation_id=)
+GET    /artifacts/:id                      — Get single artifact with full content
+GET    /artifacts/conversation/:convId     — All artifacts shared in a conversation
+PUT    /artifacts/:id                      — Update content/title/summary (bumps version) [Director only]
+DELETE /artifacts/:id                      — Delete [Director only]
 ```
 
-### Agents Cannot Create Missions
+### Agents Cannot Create Missions (Formal System)
 
-If you need a mission created, send a `category: "escalation"` message to the Director or the Chief of Staff agent. Only the Director can create and dispatch missions.
+In the DB-backed `/missions` system, only the Director can create missions. If you need one, send a `category: "escalation"` message to the Director or the Chief of Staff agent.
+
+### Live Mission Board (`/api/missions-live`)
+
+There is a second, separate mission system used by the real-time dashboard. It is NATS-backed and has a simpler status model:
+
+| Status | Meaning |
+|--------|---------|
+| `pending` | Created, awaiting pickup |
+| `active` | In progress |
+| `blocked` | Waiting on dependency or decision |
+| `complete` | Finished successfully |
+| `failed` | Cancelled or errored |
+
+Key endpoints (no Director auth required):
+```
+POST /api/missions-live                    — Create a live mission
+POST /api/missions-live/:id/cancel        — Cancel (sets status: failed)
+POST /api/missions-live/:id/retry         — Re-queue a failed mission
+POST /api/missions-live/:id/archive       — Archive (removes from active board)
+GET  /api/missions-live                   — List (?archived=true for archived, ?status=, ?operative=)
+GET  /api/missions-live/:id               — Get mission + sitrep history
+```
+
+This is what the Mission Board dashboard (`/dashboard/missions`) displays. Missions created here are in-memory only — they do not persist across server restarts.
 
 ---
 
-## 9. Deployment Notes
+## 9. Auth: Director-Restricted Endpoints
+
+Some endpoints require Director role: creating artifacts, creating/dispatching DB missions, updating/deleting agents, etc. Agents call these using the `X-VALOR-Role` header.
+
+### Headers
+
+```
+X-VALOR-Role: director
+X-VALOR-Agent-Key: <key>       ← required in production mode
+```
+
+When `VALOR_AGENT_KEY` is set in the engine's environment (production), both headers are required and the key must match. In dev mode (no `VALOR_AGENT_KEY`), `X-VALOR-Role: director` alone is accepted with a warning.
+
+### Example
+
+```bash
+curl -X POST http://<engine-host>:3200/artifacts \
+  -H "Content-Type: application/json" \
+  -H "X-VALOR-Role: director" \
+  -H "X-VALOR-Agent-Key: your-key-here" \
+  -d '{ ... }'
+```
+
+If `VALOR_AGENT_KEY` is not configured for your deployment, ask the Director or check the engine `.env`.
+
+---
+
+## 10. Deployment Notes
 
 ### systemd and PATH
 

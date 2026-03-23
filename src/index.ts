@@ -48,6 +48,7 @@ app.get("/health", async (c) => {
     providers,
     active_streams: getActiveSessions().length,
     timestamp: new Date().toISOString(),
+    skill_url: "/skill.md",
   });
 });
 

@@ -3,9 +3,9 @@ import { Hono } from "hono";
 import { freshDb, cleanupDb } from "../helpers/test-db.js";
 import { clearSubscriptions } from "../../src/bus/event-bus.js";
 import { dashboardRoutes } from "../../src/dashboard/index.js";
+import { natsState } from "../../src/dashboard/nats-state.js";
 import {
   createMission,
-  createDivision,
   createAgent,
   createApproval,
   createDecision,
@@ -20,11 +20,13 @@ app.route("/dashboard", dashboardRoutes);
 
 beforeEach(() => {
   freshDb();
+  natsState.clear();
   clearSubscriptions();
 });
 
 afterEach(() => {
   clearSubscriptions();
+  natsState.clear();
   cleanupDb();
 });
 
@@ -35,6 +37,78 @@ async function get(path: string): Promise<Response> {
   return app.fetch(req);
 }
 
+function seedOperative(
+  callsign: string,
+  status: "IDLE" | "BUSY" | "ERROR" = "IDLE",
+  currentMission: string | null = null,
+) {
+  const timestamp = new Date().toISOString();
+  natsState.handleHeartbeat({
+    id: `hb-${callsign}`,
+    timestamp,
+    source: callsign,
+    type: "heartbeat",
+    payload: {
+      operative: callsign,
+      status,
+      current_mission: currentMission,
+      tick_interval_ms: 10000,
+      uptime_seconds: 3600,
+      last_activity: timestamp,
+    },
+  });
+}
+
+function seedLiveMission(
+  missionId: string,
+  title: string,
+  assignedTo: string,
+  priority: "P0" | "P1" | "P2" | "P3" = "P2",
+  sitrepStatus: "ACCEPTED" | "IN_PROGRESS" | "BLOCKED" | "COMPLETE" | "FAILED" | null = null,
+  progressPct: number | null = null,
+  summary = "Initial mission brief",
+) {
+  const createdAt = new Date().toISOString();
+  natsState.handleMissionBrief({
+    id: `mb-${missionId}`,
+    timestamp: createdAt,
+    source: "director",
+    type: "mission.brief",
+    payload: {
+      mission_id: missionId,
+      title,
+      description: `${title} description`,
+      priority,
+      assigned_to: assignedTo,
+      depends_on: [],
+      parent_mission: null,
+      model_tier: "standard",
+      acceptance_criteria: ["Finish the task"],
+      context_refs: [],
+      deadline: null,
+      created_at: createdAt,
+    },
+  });
+
+  if (sitrepStatus) {
+    natsState.handleSitrep({
+      id: `sr-${missionId}`,
+      timestamp: new Date(Date.now() + 1000).toISOString(),
+      source: assignedTo,
+      type: "sitrep",
+      payload: {
+        mission_id: missionId,
+        status: sitrepStatus,
+        progress_pct: progressPct,
+        summary,
+        artifacts: [],
+        blockers: [],
+        next_steps: null,
+      },
+    });
+  }
+}
+
 // ── Overview page ───────────────────────────────────────────────────
 
 describe("Overview page", () => {
@@ -42,54 +116,33 @@ describe("Overview page", () => {
     const res = await get("/dashboard");
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("Mission Control");
-    expect(html).toContain("No divisions registered");
+    expect(html).toContain("Mission Control — Live Overview");
+    expect(html).toContain("No operatives online");
+    expect(html).toContain("Recent Missions");
+    expect(html).toContain("Activity Feed");
   });
 
-  it("renders division cards", async () => {
-    const div = createDivision({
-      name: "Code Division",
-      lead_agent_id: null,
-      autonomy_policy: { max_cost_autonomous_usd: 5.0, approval_required_actions: [], auto_dispatch_enabled: true },
-      escalation_policy: { escalate_to: "director", escalate_after_failures: 3, escalate_on_budget_breach: true },
-      namespace: "code",
-    });
-
-    createMission({
-      division_id: div.id,
-      title: "Test Mission",
-      objective: "Test",
-      status: "draft",
-      phase: null,
-      assigned_agent_id: null,
-      priority: "normal",
-      constraints: [],
-      deliverables: [],
-      success_criteria: [],
-      token_usage: null,
-      cost_usd: 0,
-      revision_count: 0,
-      max_revisions: 3,
-      parent_mission_id: null,
-      dispatched_at: null,
-      completed_at: null,
-    });
+  it("renders operative cards and recent missions", async () => {
+    seedOperative("Gage");
+    seedLiveMission("mission-alpha", "Alpha Mission", "Gage", "P1", "IN_PROGRESS", 42, "Working through phase 1");
 
     const res = await get("/dashboard");
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("Code Division");
-    expect(html).toContain("code"); // namespace
+    expect(html).toContain("Gage");
+    expect(html).toContain("Alpha Mission");
+    expect(html).toContain("Working through phase 1");
+    expect(html).toContain("P1");
   });
 
   it("shows global stats", async () => {
     const res = await get("/dashboard");
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("Divisions");
-    expect(html).toContain("Agents");
+    expect(html).toContain("Operatives");
     expect(html).toContain("Active Missions");
-    expect(html).toContain("Total Cost");
+    expect(html).toContain("Pending");
+    expect(html).toContain("Blocked");
   });
 });
 
@@ -100,62 +153,35 @@ describe("Missions page", () => {
     const res = await get("/dashboard/missions");
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("Mission Pipeline");
+    expect(html).toContain("Mission Board — Live");
     expect(html).toContain("No missions found");
+    expect(html).toContain("All Missions");
   });
 
   it("renders mission list", async () => {
-    createMission({
-      division_id: null,
-      title: "Alpha Mission",
-      objective: "Test objective",
-      status: "draft",
-      phase: null,
-      assigned_agent_id: null,
-      priority: "high",
-      constraints: [],
-      deliverables: [],
-      success_criteria: [],
-      token_usage: null,
-      cost_usd: 0,
-      revision_count: 0,
-      max_revisions: 3,
-      parent_mission_id: null,
-      dispatched_at: null,
-      completed_at: null,
-    });
+    seedOperative("Mira", "BUSY", "Alpha Mission");
+    seedLiveMission("mission-alpha", "Alpha Mission", "Mira", "P1", "IN_PROGRESS", 42, "Working through phase 1");
 
     const res = await get("/dashboard/missions");
+    expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("Alpha Mission");
-    expect(html).toContain("draft");
-    expect(html).toContain("high");
+    expect(html).toContain("Mira");
+    expect(html).toContain("active");
+    expect(html).toContain("P1");
+    expect(html).toContain("Working through phase 1");
   });
 
   it("filters by status", async () => {
-    createMission({
-      division_id: null,
-      title: "Draft Mission",
-      objective: "Test",
-      status: "draft",
-      phase: null,
-      assigned_agent_id: null,
-      priority: "normal",
-      constraints: [],
-      deliverables: [],
-      success_criteria: [],
-      token_usage: null,
-      cost_usd: 0,
-      revision_count: 0,
-      max_revisions: 3,
-      parent_mission_id: null,
-      dispatched_at: null,
-      completed_at: null,
-    });
+    seedOperative("Mira");
+    seedLiveMission("mission-beta", "Beta Mission", "Mira", "P2", "COMPLETE", 100, "Wrapped successfully");
 
     const res = await get("/dashboard/missions?status=complete");
+    expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("No missions found");
+    expect(html).toContain("Beta Mission");
+    expect(html).toContain("complete");
+    expect(html).toContain("100%");
   });
 });
 

@@ -14,10 +14,7 @@ const ConfigSchema = z.object({
   directorGear2Model: z.string().default("nemotron-cascade-2:latest"),
   directorConfidenceThreshold: z.coerce.number().min(0).max(10).default(5),
   natsUrl: z.string().default("nats://localhost:4222"),
-  disabledGates: z
-    .string()
-    .default("artifact_integrity,oath,vector_checkpoint")
-    .transform((s) => s.split(",").map((g) => g.trim()).filter(Boolean)),
+  disabledGates: z.string().default("").transform((s) => s.split(",").map((g) => g.trim()).filter(Boolean)),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

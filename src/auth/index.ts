@@ -6,6 +6,10 @@ import { logger } from "../utils/logger.js";
 
 export const SESSION_COOKIE = "valor_session";
 
+function isTruthyEnv(value: string | undefined): boolean {
+  return value === "1" || value === "true" || value === "yes";
+}
+
 /** Retrieve the authenticated user from context (set by authMiddleware). */
 export function getAuthUser(c: Context): User | null {
   return (c.get("authUser") as User) ?? null;
@@ -16,10 +20,10 @@ export function getAuthUser(c: Context): User | null {
  * Human users authenticated via session cookie take precedence.
  * Agents use X-VALOR-Role + X-VALOR-Agent-Key headers.
  *
- * When VALOR_AGENT_KEY env var is set (production mode), the agent must
- * provide a matching X-VALOR-Agent-Key header alongside X-VALOR-Role.
- * When VALOR_AGENT_KEY is not set (dev mode), the header fallback is
- * allowed with a warning.
+ * Header-based role auth is disabled by default.
+ * Set VALOR_AGENT_KEY to require a matching X-VALOR-Agent-Key header.
+ * Set VALOR_ALLOW_ROLE_HEADER_FALLBACK=true only when you explicitly want
+ * unauthenticated header fallback for local/test workflows.
  */
 export function getRequestRole(c: Context): string | null {
   const user = getAuthUser(c);
@@ -29,8 +33,9 @@ export function getRequestRole(c: Context): string | null {
   if (!headerRole) return null;
 
   const configuredKey = process.env.VALOR_AGENT_KEY;
+  const allowHeaderFallback = isTruthyEnv(process.env.VALOR_ALLOW_ROLE_HEADER_FALLBACK);
+
   if (configuredKey) {
-    // Production mode: require matching agent key
     const providedKey = c.req.header("X-VALOR-Agent-Key");
     if (providedKey !== configuredKey) {
       logger.warn("X-VALOR-Role header rejected: invalid or missing X-VALOR-Agent-Key", {
@@ -41,11 +46,23 @@ export function getRequestRole(c: Context): string | null {
     return headerRole;
   }
 
-  // Dev mode: allow header fallback but warn
-  logger.warn("X-VALOR-Role header accepted without agent key (dev mode — set VALOR_AGENT_KEY to enforce)", {
-    role: headerRole,
-  });
-  return headerRole;
+  if (allowHeaderFallback) {
+    logger.warn(
+      "X-VALOR-Role header accepted via explicit fallback; set VALOR_AGENT_KEY to require X-VALOR-Agent-Key",
+      {
+        role: headerRole,
+      },
+    );
+    return headerRole;
+  }
+
+  logger.warn(
+    "X-VALOR-Role header rejected: set VALOR_AGENT_KEY or VALOR_ALLOW_ROLE_HEADER_FALLBACK=true to permit header auth",
+    {
+      attempted_role: headerRole,
+    },
+  );
+  return null;
 }
 
 /**
