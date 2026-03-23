@@ -213,14 +213,20 @@ class NATSStateManager {
       this.missions.set(sitrep.mission_id, mission);
     }
 
-    // Update mission state from sitrep
+    // Update mission state from sitrep.
+    // Terminal states (complete/failed) are never overwritten by progress updates —
+    // the Director publishes a dispatch-summary ACCEPTED sitrep after the COMPLETE
+    // classification sitrep, which would otherwise regress the parent back to active.
+    const isTerminal = mission.status === "complete" || mission.status === "failed";
     if (sitrep.status === "ACCEPTED" || sitrep.status === "IN_PROGRESS") {
-      mission.status = "active";
-      if (!mission.started_at) {
-        mission.started_at = msg.timestamp;
+      if (!isTerminal) {
+        mission.status = "active";
+        if (!mission.started_at) {
+          mission.started_at = msg.timestamp;
+        }
       }
     } else if (sitrep.status === "BLOCKED") {
-      mission.status = "blocked";
+      if (!isTerminal) mission.status = "blocked";
     } else if (sitrep.status === "COMPLETE") {
       mission.status = "complete";
       mission.completed_at = msg.timestamp;
