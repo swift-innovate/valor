@@ -18,8 +18,9 @@ import {
   publishMissionBrief,
   publishSitrep,
 } from "../nats/publishers.js";
-import type { MissionBrief, NatsSitrep } from "../nats/types.js";
+import type { MissionBrief, NatsSitrep, SitrepArtifact } from "../nats/types.js";
 import type { MissionBrief as NatsMissionBrief } from "../types/nats.js";
+import { createArtifact } from "../db/index.js";
 
 export const missionsLiveRoutes = new Hono();
 
@@ -344,7 +345,7 @@ missionsLiveRoutes.post("/:id/sitrep", async (c) => {
   const mission_id = c.req.param("id");
   const body = await c.req.json();
 
-  const { operative, status, summary, progress_pct, blockers, next_steps, artifacts, tokens_used } = body;
+  const { operative, status, summary, progress_pct, blockers, next_steps, tokens_used } = body;
 
   if (!operative || !status || !summary) {
     return c.json({ error: "operative, status, and summary are required" }, 400);
@@ -355,6 +356,34 @@ missionsLiveRoutes.post("/:id/sitrep", async (c) => {
     return c.json({ error: `status must be one of: ${validStatuses.join(", ")}` }, 400);
   }
 
+  // Auto-create artifacts from inline deliverable content.
+  // Agents may pass either:
+  //   artifacts: [{type, label, ref}]          — references to external work
+  //   deliverables: [{title, content_type, content, language?, summary?}]  — inline content
+  const artifactRefs: SitrepArtifact[] = body.artifacts ?? [];
+  const createdArtifactIds: string[] = [];
+
+  if (Array.isArray(body.deliverables)) {
+    for (const d of body.deliverables) {
+      if (!d.title || !d.content_type || !d.content) continue;
+      try {
+        const artifact = createArtifact({
+          title: d.title,
+          content_type: d.content_type,
+          language: d.language ?? null,
+          content: d.content,
+          summary: d.summary ?? null,
+          created_by: operative,
+          conversation_id: mission_id,
+        });
+        createdArtifactIds.push(artifact.id);
+        artifactRefs.push({ type: "note", label: d.title, ref: artifact.id });
+      } catch {
+        // Non-fatal — continue with remaining deliverables
+      }
+    }
+  }
+
   const nc = currentConnection();
   const sitrep: NatsSitrep = {
     mission_id,
@@ -362,7 +391,7 @@ missionsLiveRoutes.post("/:id/sitrep", async (c) => {
     status,
     progress_pct: progress_pct ?? (status === "COMPLETE" ? 100 : null),
     summary,
-    artifacts: artifacts ?? [],
+    artifacts: artifactRefs,
     blockers: blockers ?? [],
     next_steps: next_steps ?? [],
     tokens_used: tokens_used ?? null,
@@ -386,7 +415,12 @@ missionsLiveRoutes.post("/:id/sitrep", async (c) => {
     payload: sitrep,
   });
 
-  return c.json({ mission_id, status, message: "Sitrep accepted" }, 201);
+  return c.json({
+    mission_id,
+    status,
+    message: "Sitrep accepted",
+    artifacts_created: createdArtifactIds,
+  }, 201);
 });
 
 // ── POST /api/missions-live/:id/archive ──────────────────────────────

@@ -34,11 +34,8 @@ artifactRoutes.get("/:id", (c) => {
   return c.json(artifact);
 });
 
-// Create artifact
+// Create artifact — open to all agents (Director gate only on update/delete)
 artifactRoutes.post("/", async (c) => {
-  const denied = requireDirector(c);
-  if (denied) return denied;
-
   let body: Record<string, unknown>;
   try {
     body = await c.req.json();

@@ -386,6 +386,50 @@ POST /api/missions-live/:mission_id/sitrep
 - Use `FAILED` if you cannot complete the mission
 - Use `BLOCKED` if you are waiting on a dependency
 
+### Submitting Deliverable Content
+
+Include your actual deliverable content in the `deliverables` array — VALOR will create the artifacts automatically and attach them to the mission:
+
+```json
+{
+  "operative": "Mira",
+  "status": "COMPLETE",
+  "summary": "Onboarding document drafted and attached.",
+  "progress_pct": 100,
+  "deliverables": [
+    {
+      "title": "Agent Onboarding Guide",
+      "content_type": "markdown",
+      "content": "# Agent Onboarding\n\nWelcome to VALOR...",
+      "summary": "Complete onboarding guide for new operatives"
+    },
+    {
+      "title": "config-template.yaml",
+      "content_type": "config",
+      "language": "yaml",
+      "content": "operative:\n  callsign: ...",
+      "summary": "Starter config for agent registration"
+    }
+  ]
+}
+```
+
+**`content_type` values:** `code`, `markdown`, `config`, `data`, `text`, `log`
+
+The response will include `artifacts_created: ["art_xxx", ...]` with the IDs of the saved artifacts.
+
+You can also reference external work (files, branches, PRs) via the `artifacts` array:
+
+```json
+{
+  "artifacts": [
+    { "type": "file", "label": "Output file", "ref": "/path/to/output.md" },
+    { "type": "url",  "label": "PR",          "ref": "https://github.com/org/repo/pull/42" },
+    { "type": "branch", "label": "Branch",    "ref": "feature/vm-712-onboarding" }
+  ]
+}
+```
+
 ---
 
 ### Submit a Sitrep (Legacy)
