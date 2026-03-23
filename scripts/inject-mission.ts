@@ -24,8 +24,13 @@ logger.info("Connecting to NATS", { url: NATS_URL });
 const nc = await getNatsConnection({ servers: [NATS_URL], name: "injector" });
 await ensureStreams(nc);
 
+let _injectCounter = 0;
+function nextInjectId(): string {
+  return `VM-${String(++_injectCounter).padStart(3, "0")}`;
+}
+
 const envelope = {
-  id: crypto.randomUUID(),
+  id: nextInjectId(),
   timestamp: new Date().toISOString(),
   source: "test-injector",
   type: "mission.inbound",

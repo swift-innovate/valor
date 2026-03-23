@@ -149,9 +149,10 @@ async function main(): Promise<void> {
         const text = new TextDecoder().decode(msg.data);
         const envelope = JSON.parse(text) as VALORMessage<{ text: string }>;
         const missionText = envelope.payload?.text ?? text;
-        // Use the envelope's ID as the mission prefix so dashboard pre-seeding
-        // and Director-generated IDs stay in sync (VM-456 → VM-456-1, VM-456-2)
-        const missionId = envelope.id ?? nextMissionId();
+        // Use the envelope's ID as mission prefix only if it looks like a VM-NNN id.
+        // UUIDs (from inject-mission.ts or other tools) fall back to nextMissionId().
+        const isVmId = envelope.id && /^VM-\d+/.test(envelope.id);
+        const missionId = isVmId ? envelope.id! : nextMissionId();
 
         logger.info("Inbound mission received", {
           id: missionId,
