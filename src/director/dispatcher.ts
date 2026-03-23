@@ -279,6 +279,35 @@ async function dispatchDecompose(
     missionIds.push(missionId);
   }
 
+  // Ensure parent mission exists in DB so sub-mission FKs don't fail
+  try {
+    createMission(
+      {
+        division_id: null,
+        title: `Mission ${prefix}`,
+        objective: missionText.substring(0, 500),
+        status: "dispatched",
+        phase: null,
+        assigned_agent_id: null,
+        priority: mapPriority((output.routing?.priority as MissionPriority) ?? "P2"),
+        constraints: [],
+        deliverables: [],
+        success_criteria: [],
+        token_usage: null,
+        cost_usd: 0,
+        revision_count: 0,
+        max_revisions: 5,
+        parent_mission_id: null,
+        initiative_id: null,
+        dispatched_at: new Date().toISOString(),
+        completed_at: null,
+      },
+      prefix,
+    );
+  } catch {
+    // Parent may already exist — non-fatal
+  }
+
   // Publish each sub-mission
   for (const step of steps) {
     const missionId = idMap.get(step.task_id)!;

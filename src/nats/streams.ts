@@ -36,14 +36,17 @@ const NATS_ACK_WAIT_MS = parseInt(process.env.NATS_ACK_WAIT_MS ?? "600000", 10);
 export async function ensureStreams(nc: NatsConnection): Promise<void> {
   const jsm = await jetstreamManager(nc);
 
-  // MISSIONS — WorkQueue: one consumer acks, message removed.
+  // MISSIONS — Limits: 7-day retention so briefs survive restart for hydration.
+  // Agents use durable pull consumers with explicit ack; ack doesn't delete the
+  // message with Limits retention, allowing dashboard hydration to replay briefs.
   await upsertStream(jsm, {
     name: STREAM_NAMES.MISSIONS,
     subjects: [STREAM_SUBJECTS.MISSIONS],
-    retention: RetentionPolicy.Workqueue,
+    retention: RetentionPolicy.Limits,
     storage: StorageType.File,
     discard: DiscardPolicy.Old,
     max_msgs: 10_000,
+    max_age: msToNanos(7 * DAY_MS),
   });
 
   // SITREPS — Limits: 7-day retention for audit trail.
@@ -168,20 +171,29 @@ async function upsertStream(
   cfg: StreamConfig,
 ): Promise<void> {
   try {
-    // Try to update existing stream (only mutable fields)
     const existing = await jsm.streams.info(cfg.name);
     if (existing) {
-      await jsm.streams.update(cfg.name, {
-        subjects: cfg.subjects,
-        discard: cfg.discard,
-        max_msgs: cfg.max_msgs ?? -1,
-        max_age: cfg.max_age ?? (0 as Nanos),
-      });
-      logger.debug(`NATS stream updated: ${cfg.name}`);
-      return;
+      // Retention policy is immutable — delete and recreate if it changed
+      if (existing.config.retention !== cfg.retention) {
+        logger.info(`NATS stream ${cfg.name} retention mismatch — recreating`, {
+          old: existing.config.retention,
+          new: cfg.retention,
+        });
+        await jsm.streams.delete(cfg.name);
+        // Fall through to create below
+      } else {
+        await jsm.streams.update(cfg.name, {
+          subjects: cfg.subjects,
+          discard: cfg.discard,
+          max_msgs: cfg.max_msgs ?? -1,
+          max_age: cfg.max_age ?? (0 as Nanos),
+        });
+        logger.debug(`NATS stream updated: ${cfg.name}`);
+        return;
+      }
     }
   } catch {
-    // Stream doesn't exist, create it
+    // Stream doesn't exist or delete succeeded, create it
   }
 
   await jsm.streams.add({
