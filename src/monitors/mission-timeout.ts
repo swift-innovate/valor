@@ -14,6 +14,7 @@ import { getNatsConnection } from "../nats/client.js";
 import { publishMissionBrief } from "../nats/publishers.js";
 import type { MissionBrief } from "../nats/types.js";
 import { logger } from "../utils/logger.js";
+import { listAgents } from "../db/index.js";
 
 // ---------------------------------------------------------------------------
 // Configuration (overridable via environment variables)
@@ -127,11 +128,26 @@ export class MissionTimeoutMonitor {
   ): Promise<void> {
     // Find an IDLE operative that is not the current assignee
     const operatives = natsState.getOperatives();
-    const candidate = operatives.find(
+    let candidateCallsign = operatives.find(
       (op) => op.status === "IDLE" && op.callsign !== mission.assigned_to,
-    );
+    )?.callsign;
 
-    if (!candidate) {
+    // If no NATS-IDLE operative found, fall back to DB agents list
+    if (!candidateCallsign) {
+      const dbAgents = listAgents({});
+      const dbCandidate = dbAgents.find(
+        (a) => a.health_status === "healthy" && a.callsign !== mission.assigned_to,
+      );
+      if (dbCandidate) {
+        candidateCallsign = dbCandidate.callsign;
+        logger.warn(
+          `[MissionTimeoutMonitor] No NATS-IDLE operative — falling back to DB agent: ${dbCandidate.callsign}`,
+          { mission_id: mission.mission_id, reason },
+        );
+      }
+    }
+
+    if (!candidateCallsign) {
       logger.warn("[MissionTimeoutMonitor] No IDLE operative available — skipping reassignment", {
         mission_id: mission.mission_id,
         reason,
@@ -149,7 +165,7 @@ export class MissionTimeoutMonitor {
       title: mission.title,
       description: mission.description,
       priority: mission.priority,
-      assigned_to: candidate.callsign,
+      assigned_to: candidateCallsign,
       depends_on: [],
       parent_mission: null,
       model_tier: "balanced",
@@ -164,12 +180,12 @@ export class MissionTimeoutMonitor {
       await publishMissionBrief(nc, "valor-monitor", brief);
 
       // Update local state
-      natsState.reassignMission(mission.mission_id, candidate.callsign);
+      natsState.reassignMission(mission.mission_id, candidateCallsign);
 
       logger.info("[MissionTimeoutMonitor] Mission reassigned", {
         mission_id: mission.mission_id,
         old_operative: oldOperative,
-        new_operative: candidate.callsign,
+        new_operative: candidateCallsign,
         reason,
       });
     } catch (err: unknown) {

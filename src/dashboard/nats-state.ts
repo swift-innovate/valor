@@ -37,6 +37,7 @@ export interface DashboardMission {
   blockers: string[];
   latest_sitrep: string | null;
   last_sitrep_at: string | null;
+  parent_mission: string | null;
 }
 
 /**
@@ -114,7 +115,7 @@ class NATSStateManager {
   
   // Heartbeat timeout tracking
   private heartbeatTimeouts: Map<string, NodeJS.Timeout> = new Map();
-  private readonly HEARTBEAT_TIMEOUT_MS = 60000; // 60 seconds
+  private readonly HEARTBEAT_TIMEOUT_MS = 300000; // 5 minutes
 
   // Event listeners for real-time updates
   private listeners: Set<(event: string, data: unknown) => void> = new Set();
@@ -166,6 +167,7 @@ class NATSStateManager {
       blockers: [],
       latest_sitrep: null,
       last_sitrep_at: null,
+      parent_mission: brief.parent_mission ?? null,
     };
 
     this.missions.set(brief.mission_id, mission);
@@ -209,6 +211,7 @@ class NATSStateManager {
         blockers: [],
         latest_sitrep: null,
         last_sitrep_at: null,
+        parent_mission: null,
       };
       this.missions.set(sitrep.mission_id, mission);
     }
@@ -276,6 +279,11 @@ class NATSStateManager {
 
     this.emit("mission.updated", mission);
     this.emit("sitrep.received", sitrep);
+
+    // Rollup: if this mission has a parent, check if all siblings are terminal
+    if (mission.parent_mission) {
+      this.checkParentRollup(mission.parent_mission);
+    }
   }
 
   /**
@@ -411,6 +419,34 @@ class NATSStateManager {
     }
 
     this.emit("comms.received", dashboardComms);
+  }
+
+  /**
+   * Rollup: mark parent complete/failed when all children reach a terminal state
+   */
+  private checkParentRollup(parentId: string): void {
+    const parent = this.missions.get(parentId);
+    if (!parent) return;
+    if (parent.status === "complete" || parent.status === "failed") return;
+
+    // Find all children of this parent
+    const children = Array.from(this.missions.values()).filter(
+      (m) => m.parent_mission === parentId
+    );
+    if (children.length === 0) return;
+
+    // All children must be terminal
+    const allTerminal = children.every(
+      (m) => m.status === "complete" || m.status === "failed"
+    );
+    if (!allTerminal) return;
+
+    const anyFailed = children.some((m) => m.status === "failed");
+    parent.status = anyFailed ? "failed" : "complete";
+    parent.completed_at = new Date().toISOString();
+    if (!anyFailed) parent.progress_pct = 100;
+
+    this.emit("mission.updated", parent);
   }
 
   /**
