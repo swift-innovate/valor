@@ -183,8 +183,14 @@ missionsLiveRoutes.post("/:id/cancel", async (c) => {
     }
   }
 
-  // Update local state
+  // Update local state and queue abort directive for the operative
   natsState.updateMissionStatus(mission_id, "failed");
+  natsState.pushDirective(mission.assigned_to, {
+    type: "abort",
+    mission_id,
+    reason: "Mission cancelled by Principal",
+    issued_at: now(),
+  });
 
   return c.json({
     mission_id,
@@ -325,8 +331,14 @@ missionsLiveRoutes.post("/:id/reassign", async (c) => {
     }
   }
 
-  // Update local state
+  // Update local state; abort directive for old operative, none for new (brief handles pickup)
   natsState.reassignMission(mission_id, new_operative);
+  natsState.pushDirective(old_operative, {
+    type: "abort",
+    mission_id,
+    reason: `Mission reassigned to ${new_operative} by Principal`,
+    issued_at: now(),
+  });
 
   return c.json({
     mission_id,
@@ -471,6 +483,15 @@ missionsLiveRoutes.get("/", (c) => {
   }
 
   return c.json(natsState.getMissions({ status, operative }));
+});
+
+// ── GET /api/missions-live/directives/:callsign ──────────────────────
+// Agents poll this to receive abort/pause directives. Drains on read.
+
+missionsLiveRoutes.get("/directives/:callsign", (c) => {
+  const callsign = c.req.param("callsign");
+  const directives = natsState.drainDirectives(callsign);
+  return c.json({ callsign, directives });
 });
 
 // ── GET /api/missions-live/:id — Get mission detail ──────────────────

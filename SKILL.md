@@ -618,15 +618,50 @@ There is a second, separate mission system used by the real-time dashboard. It i
 
 Key endpoints (no Director auth required):
 ```
-POST /api/missions-live                    — Create a live mission
-POST /api/missions-live/:id/cancel        — Cancel (sets status: failed)
-POST /api/missions-live/:id/retry         — Re-queue a failed mission
-POST /api/missions-live/:id/archive       — Archive (removes from active board)
-GET  /api/missions-live                   — List (?archived=true for archived, ?status=, ?operative=)
-GET  /api/missions-live/:id               — Get mission + sitrep history
+POST /api/missions-live                              — Create a live mission
+POST /api/missions-live/:id/cancel                  — Cancel (sets status: failed)
+POST /api/missions-live/:id/retry                   — Re-queue a failed mission
+POST /api/missions-live/:id/archive                 — Archive (removes from active board)
+GET  /api/missions-live                             — List (?archived=true for archived, ?status=, ?operative=)
+GET  /api/missions-live/:id                         — Get mission + sitrep history
+GET  /api/missions-live/directives/:callsign        — Drain abort/pause directives for your callsign
 ```
 
 This is what the Mission Board dashboard (`/dashboard/missions`) displays. Missions created here are in-memory only — they do not persist across server restarts.
+
+### Directive Polling — Abort and Reassignment Signals
+
+The Principal can cancel or reassign your mission at any time. **You must check for directives regularly during long-running work** — between major steps, before starting a new phase, or on every poll cycle.
+
+```
+GET /api/missions-live/directives/<your-callsign>
+```
+
+Response:
+```json
+{
+  "callsign": "eddie",
+  "directives": [
+    {
+      "type": "abort",
+      "mission_id": "VM-042",
+      "reason": "Mission cancelled by Principal",
+      "issued_at": "2026-03-23T14:00:00.000Z"
+    }
+  ]
+}
+```
+
+This endpoint **drains** — directives are cleared on read. If the list is empty, no action needed.
+
+**When you receive an `abort` directive for your active mission:**
+1. Stop work on that mission immediately. Do not continue or submit further deliverables.
+2. Submit a final sitrep: `POST /api/missions-live/:id/sitrep` with `status: "FAILED"` and `summary: "Aborted — received abort directive from Principal"`.
+3. Check for new missions in your queue: `GET /api/missions-live?operative=<callsign>&status=pending`.
+4. If nothing is queued, return to idle and resume your normal poll cycle.
+
+**When you receive a `reassign` directive:**
+Same as abort — stop work and submit a final sitrep. The mission has been reassigned to another operative; your work on it is complete.
 
 ---
 

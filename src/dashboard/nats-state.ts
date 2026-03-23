@@ -99,6 +99,16 @@ export interface DashboardSitrep {
 }
 
 /**
+ * Directive sent to an operative (abort, pause, reassign, etc.)
+ */
+export interface OperativeDirective {
+  type: "abort" | "pause" | "reassign";
+  mission_id: string;
+  reason: string;
+  issued_at: string;
+}
+
+/**
  * In-memory state maintained from NATS subscriptions
  */
 class NATSStateManager {
@@ -112,7 +122,10 @@ class NATSStateManager {
 
   // Sitrep history per mission
   private sitrepHistory: Map<string, DashboardSitrep[]> = new Map();
-  
+
+  // Directives queued per operative callsign (drained on poll)
+  private directiveQueues: Map<string, OperativeDirective[]> = new Map();
+
   // Heartbeat timeout tracking
   private heartbeatTimeouts: Map<string, NodeJS.Timeout> = new Map();
   private readonly HEARTBEAT_TIMEOUT_MS = 300000; // 5 minutes
@@ -659,6 +672,26 @@ class NATSStateManager {
     mission.completed_at = null;
     this.emit("mission.updated", mission);
     return true;
+  }
+
+  /**
+   * Queue a directive for an operative. Called by cancel/reassign routes.
+   */
+  pushDirective(callsign: string, directive: OperativeDirective): void {
+    if (!callsign) return;
+    const queue = this.directiveQueues.get(callsign) ?? [];
+    queue.push(directive);
+    this.directiveQueues.set(callsign, queue);
+  }
+
+  /**
+   * Return and clear all queued directives for an operative.
+   * Agents call this on their poll cycle to drain their directive inbox.
+   */
+  drainDirectives(callsign: string): OperativeDirective[] {
+    const queue = this.directiveQueues.get(callsign) ?? [];
+    this.directiveQueues.delete(callsign);
+    return queue;
   }
 
   /**
