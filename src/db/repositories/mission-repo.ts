@@ -41,11 +41,11 @@ export function createMission(
   getDb().execute(
     `INSERT INTO missions (id, division_id, title, objective, status, phase, assigned_agent_id,
      priority, constraints, deliverables, success_criteria, token_usage, cost_usd,
-     revision_count, max_revisions, parent_mission_id, created_at, updated_at,
+     revision_count, max_revisions, parent_mission_id, initiative_id, created_at, updated_at,
      dispatched_at, completed_at)
      VALUES (@id, @division_id, @title, @objective, @status, @phase, @assigned_agent_id,
      @priority, @constraints, @deliverables, @success_criteria, @token_usage, @cost_usd,
-     @revision_count, @max_revisions, @parent_mission_id, @created_at, @updated_at,
+     @revision_count, @max_revisions, @parent_mission_id, @initiative_id, @created_at, @updated_at,
      @dispatched_at, @completed_at)`,
     {
       id,
@@ -64,6 +64,7 @@ export function createMission(
       revision_count: input.revision_count,
       max_revisions: input.max_revisions,
       parent_mission_id: input.parent_mission_id,
+      initiative_id: input.initiative_id,
       created_at: now,
       updated_at: now,
       dispatched_at: input.dispatched_at,
