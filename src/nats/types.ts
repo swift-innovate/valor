@@ -118,6 +118,8 @@ export interface NatsSitrep {
   next_steps: string[];
   tokens_used: number | null;
   timestamp: string;
+  /** Parent mission ID — propagated so dashboard can rebuild parent→child linkage */
+  parent_mission?: string | null;
 }
 
 export type SitrepMessage = VALORMessage<NatsSitrep> & { type: "sitrep" };

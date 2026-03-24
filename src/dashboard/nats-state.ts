@@ -18,6 +18,8 @@ import type {
   CommsMessage,
 } from "../types/nats.js";
 import type { NatsSitrep } from "../nats/index.js";
+import { getMission, transitionMission } from "../db/repositories/mission-repo.js";
+import { logger } from "../utils/logger.js";
 
 /**
  * Mission state maintained from NATS subscriptions
@@ -224,9 +226,15 @@ class NATSStateManager {
         blockers: [],
         latest_sitrep: null,
         last_sitrep_at: null,
-        parent_mission: null,
+        parent_mission: sitrep.parent_mission ?? null,
       };
       this.missions.set(sitrep.mission_id, mission);
+    }
+
+    // Backfill parent linkage if the sitrep carries it and the mission doesn't have it
+    // (e.g. mission was created from a brief that was purged from JetStream)
+    if (sitrep.parent_mission && !mission.parent_mission) {
+      mission.parent_mission = sitrep.parent_mission;
     }
 
     // Update mission state from sitrep.
@@ -435,7 +443,8 @@ class NATSStateManager {
   }
 
   /**
-   * Rollup: mark parent complete/failed when all children reach a terminal state
+   * Rollup: mark parent complete/failed when all children reach a terminal state.
+   * Updates both in-memory dashboard state AND the DB mission record.
    */
   private checkParentRollup(parentId: string): void {
     const parent = this.missions.get(parentId);
@@ -455,11 +464,88 @@ class NATSStateManager {
     if (!allTerminal) return;
 
     const anyFailed = children.some((m) => m.status === "failed");
-    parent.status = anyFailed ? "failed" : "complete";
+    const newStatus = anyFailed ? "failed" : "complete";
+    parent.status = newStatus;
     parent.completed_at = new Date().toISOString();
     if (!anyFailed) parent.progress_pct = 100;
 
+    // Aggregate child artifacts onto the parent
+    for (const child of children) {
+      if (child.artifacts.length > 0) {
+        for (const art of child.artifacts) {
+          if (!parent.artifacts.includes(art)) {
+            parent.artifacts.push(art);
+          }
+        }
+      }
+    }
+
+    // Sync to DB — transition parent mission to complete/failed
+    try {
+      const dbMission = getMission(parentId);
+      if (dbMission && dbMission.status !== "complete" && dbMission.status !== "failed") {
+        // Walk through valid transitions to reach the target status
+        const targetDbStatus = newStatus as "complete" | "failed";
+        this.transitionDbMissionToTerminal(parentId, dbMission.status, targetDbStatus);
+      }
+    } catch (err) {
+      logger.warn("Failed to sync parent rollup to DB", {
+        parent_id: parentId,
+        target_status: newStatus,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     this.emit("mission.updated", parent);
+  }
+
+  /**
+   * Walk a DB mission through valid transitions to reach a terminal state.
+   * Handles cases where parent is at dispatched/streaming/etc and needs
+   * intermediate steps to reach complete or failed.
+   */
+  private transitionDbMissionToTerminal(
+    id: string,
+    currentStatus: string,
+    target: "complete" | "failed",
+  ): void {
+    // Map of shortest paths to terminal states
+    const pathToComplete: Record<string, string[]> = {
+      draft: ["queued", "gated", "dispatched", "streaming", "complete"],
+      queued: ["gated", "dispatched", "streaming", "complete"],
+      gated: ["dispatched", "streaming", "complete"],
+      dispatched: ["streaming", "complete"],
+      streaming: ["complete"],
+    };
+    const pathToFailed: Record<string, string[]> = {
+      draft: ["queued", "gated", "dispatched", "failed"],
+      queued: ["gated", "dispatched", "failed"],
+      gated: ["dispatched", "failed"],
+      dispatched: ["failed"],
+      streaming: ["failed"],
+    };
+
+    const path = target === "complete"
+      ? pathToComplete[currentStatus]
+      : pathToFailed[currentStatus];
+
+    if (!path) {
+      logger.warn("No transition path for parent rollup", {
+        id, currentStatus, target,
+      });
+      return;
+    }
+
+    for (const step of path) {
+      try {
+        transitionMission(id, step as any);
+      } catch (err) {
+        logger.warn("Parent rollup transition step failed", {
+          id, step, error: err instanceof Error ? err.message : String(err),
+        });
+        return;
+      }
+    }
   }
 
   /**

@@ -20,7 +20,12 @@ import {
 } from "../nats/publishers.js";
 import type { MissionBrief, NatsSitrep, SitrepArtifact } from "../nats/types.js";
 import type { MissionBrief as NatsMissionBrief } from "../types/nats.js";
-import { createArtifact } from "../db/index.js";
+import {
+  createArtifact,
+  getMission as getDbMission,
+  listMissions as listDbMissions,
+  listArtifactsByConversation,
+} from "../db/index.js";
 
 export const missionsLiveRoutes = new Hono();
 
@@ -396,6 +401,10 @@ missionsLiveRoutes.post("/:id/sitrep", async (c) => {
     }
   }
 
+  // Resolve parent_mission from natsState (preferred) or DB
+  const dashMission = natsState.getMission(mission_id);
+  const parentMission = dashMission?.parent_mission ?? null;
+
   const nc = currentConnection();
   const sitrep: NatsSitrep = {
     mission_id,
@@ -408,6 +417,7 @@ missionsLiveRoutes.post("/:id/sitrep", async (c) => {
     next_steps: next_steps ?? [],
     tokens_used: tokens_used ?? null,
     timestamp: new Date().toISOString(),
+    parent_mission: parentMission,
   };
 
   if (nc) {
@@ -433,6 +443,152 @@ missionsLiveRoutes.post("/:id/sitrep", async (c) => {
     message: "Sitrep accepted",
     artifacts_created: createdArtifactIds,
   }, 201);
+});
+
+// ── POST /api/missions-live/:id/repair ───────────────────────────────
+// Re-syncs dashboard state from DB for a stuck mission and its children.
+// Recovers status, artifacts, and parent linkage. Director-only.
+
+missionsLiveRoutes.post("/:id/repair", (c) => {
+  const mission_id = c.req.param("id");
+  const repairLog: string[] = [];
+
+  // Load the mission and children from DB
+  const dbParent = getDbMission(mission_id);
+  if (!dbParent) {
+    return c.json({ error: `Mission ${mission_id} not found in DB` }, 404);
+  }
+
+  // Find all children
+  const allDbMissions = listDbMissions();
+  const children = allDbMissions.filter(m => m.parent_mission_id === mission_id);
+
+  // Map DB status to dashboard status
+  const mapStatus = (s: string): "pending" | "active" | "blocked" | "complete" | "failed" => {
+    if (s === "complete" || s === "aar_complete" || s === "aar_pending") return "complete";
+    if (s === "failed") return "failed";
+    if (s === "aborted" || s === "timed_out") return "failed";
+    if (s === "draft" || s === "queued" || s === "gated") return "pending";
+    return "active"; // dispatched, streaming
+  };
+
+  // Repair a single mission in natsState from DB
+  const repairOne = (dbMission: typeof dbParent, parentId: string | null) => {
+    const dashStatus = mapStatus(dbMission.status);
+    let dashMission = natsState.getMission(dbMission.id);
+
+    // Collect artifacts from DB
+    const dbArtifacts = listArtifactsByConversation(dbMission.id);
+    const artifactStrings = dbArtifacts.map(
+      a => `${a.title} (${a.content_type}): ${a.id}`
+    );
+
+    if (!dashMission) {
+      // Create in natsState via a synthetic sitrep
+      natsState.handleSitrep({
+        id: `repair-${dbMission.id}-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        source: "repair",
+        type: "sitrep",
+        payload: {
+          mission_id: dbMission.id,
+          operative: "repair",
+          status: dashStatus === "complete" ? "COMPLETE"
+            : dashStatus === "failed" ? "FAILED"
+            : "IN_PROGRESS",
+          progress_pct: dashStatus === "complete" ? 100 : 0,
+          summary: `[Repaired from DB] ${dbMission.title}`,
+          artifacts: dbArtifacts.map(a => ({
+            type: "note" as const,
+            label: a.title,
+            ref: a.id,
+          })),
+          blockers: [],
+          next_steps: [],
+          tokens_used: null,
+          timestamp: new Date().toISOString(),
+          parent_mission: parentId,
+        },
+      });
+      repairLog.push(`Created dashboard entry for ${dbMission.id} (${dashStatus})`);
+      dashMission = natsState.getMission(dbMission.id);
+    } else {
+      // Update existing dashboard entry
+      dashMission.status = dashStatus;
+      dashMission.title = dbMission.title || dashMission.title;
+      if (dbMission.completed_at) dashMission.completed_at = dbMission.completed_at;
+      if (dbMission.dispatched_at && !dashMission.started_at) {
+        dashMission.started_at = dbMission.dispatched_at;
+      }
+      if (parentId && !dashMission.parent_mission) {
+        dashMission.parent_mission = parentId;
+      }
+      if (dashStatus === "complete") dashMission.progress_pct = 100;
+      repairLog.push(`Updated dashboard entry for ${dbMission.id} → ${dashStatus}`);
+    }
+
+    // Merge artifacts
+    if (dashMission && artifactStrings.length > 0) {
+      for (const art of artifactStrings) {
+        if (!dashMission.artifacts.includes(art)) {
+          dashMission.artifacts.push(art);
+        }
+      }
+      repairLog.push(`Attached ${artifactStrings.length} artifact(s) to ${dbMission.id}`);
+    }
+  };
+
+  // Repair children first, then parent (so rollup sees them)
+  for (const child of children) {
+    repairOne(child, mission_id);
+  }
+  repairOne(dbParent, dbParent.parent_mission_id);
+
+  // Aggregate child artifacts onto parent
+  const parentDash = natsState.getMission(mission_id);
+  if (parentDash) {
+    for (const child of children) {
+      const childDash = natsState.getMission(child.id);
+      if (childDash) {
+        for (const art of childDash.artifacts) {
+          if (!parentDash.artifacts.includes(art)) {
+            parentDash.artifacts.push(art);
+          }
+        }
+      }
+    }
+  }
+
+  // Publish NATS sitrep for Telegram notification if parent is now complete
+  const nc = currentConnection();
+  if (nc && parentDash && parentDash.status === "complete") {
+    publishSitrep(nc, "repair", {
+      mission_id,
+      operative: "repair",
+      status: "COMPLETE",
+      progress_pct: 100,
+      summary: `[Repaired] ${dbParent.title} — ${children.length} sub-missions, ${parentDash.artifacts.length} artifact(s)`,
+      artifacts: parentDash.artifacts.map(a => {
+        const match = a.match(/^(.+?) \((.+?)\): (.+)$/);
+        return match
+          ? { type: "note" as const, label: match[1], ref: match[3] }
+          : { type: "note" as const, label: a, ref: a };
+      }),
+      blockers: [],
+      next_steps: [],
+      tokens_used: null,
+      timestamp: new Date().toISOString(),
+      parent_mission: dbParent.parent_mission_id,
+    }).catch(() => { /* non-fatal */ });
+  }
+
+  return c.json({
+    mission_id,
+    status: parentDash?.status ?? mapStatus(dbParent.status),
+    children_repaired: children.length,
+    artifacts_total: parentDash?.artifacts.length ?? 0,
+    repair_log: repairLog,
+  });
 });
 
 // ── POST /api/missions-live/:id/archive ──────────────────────────────

@@ -643,6 +643,7 @@ Key endpoints (no Director auth required):
 POST /api/missions-live                              — Create a live mission
 POST /api/missions-live/:id/cancel                  — Cancel (sets status: failed)
 POST /api/missions-live/:id/retry                   — Re-queue a failed mission
+POST /api/missions-live/:id/repair                  — Re-sync dashboard from DB (fixes stuck missions)
 POST /api/missions-live/:id/archive                 — Archive (removes from active board)
 GET  /api/missions-live                             — List (?archived=true for archived, ?status=, ?operative=)
 GET  /api/missions-live/:id                         — Get mission + sitrep history
