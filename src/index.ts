@@ -166,6 +166,10 @@ natsSubscriber.start(natsUrl).catch((err) => {
 import { missionTimeoutMonitor } from "./monitors/mission-timeout.js";
 missionTimeoutMonitor.start();
 
+// Start agent health sweep monitor
+import { agentHealthMonitor } from "./monitors/agent-health.js";
+agentHealthMonitor.start();
+
 const server = serve({ fetch: app.fetch, port: config.port }, () => {
   logger.info("VALOR engine started", {
     port: config.port,
@@ -184,6 +188,7 @@ async function shutdown() {
   closeWebSocket();
   stopHealthMonitor();
   missionTimeoutMonitor.stop();
+  agentHealthMonitor.stop();
   await natsSubscriber.stop();
   server.close();
   closeDb();
