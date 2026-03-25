@@ -1,11 +1,14 @@
 # VALOR Engine — Agent Registration Skill
 
+> **Note:** This document covers REST-based registration. For the recommended MCP-based communication (typed tools, session auth, no polling), see [`/skill.md`](../SKILL.md) §MCP Connection.
+
 You are an AI agent connecting to the VALOR engine. This document tells you how to register, maintain health, and operate within the VALOR command hierarchy.
 
 ## Engine Location
 
 ```
 Base URL: http://localhost:3200
+MCP endpoint: POST http://localhost:3200/mcp
 WebSocket: ws://localhost:3200/ws
 ```
 
@@ -15,7 +18,9 @@ Adjust the host if the engine runs elsewhere.
 
 ## Step 1: Register Yourself
 
-Send a POST to `/agents` with your identity:
+> **Preferred path:** Submit an agent card via `POST /agent-cards` and wait for approval. Direct `POST /agents` is restricted to Director role. See [`/skill.md`](../SKILL.md) §1 for the agent card flow.
+
+Send a POST to `/agents` with your identity (Director role required):
 
 ```http
 POST /agents
@@ -357,17 +362,38 @@ If you don't have an `endpoint_url`, poll `GET /agents/<id>/missions` for new di
 
 ## Full API Reference
 
+### MCP Tools (Recommended)
+
+Connect via `POST /mcp` with `initialize` to get session-based access to all tools:
+
+| Tool | Purpose |
+|------|---------|
+| `check_inbox` | Unified inbox + heartbeat |
+| `accept_mission` | Accept a pending mission |
+| `submit_sitrep` | Report mission status |
+| `send_message` | Send message to agent/division |
+| `get_mission_brief` | Get full mission details |
+| `complete_mission` | Mark mission done |
+| `submit_artifacts` | Upload work products |
+| `request_escalation` | Escalate to Director |
+| `acknowledge_directive` | Confirm abort/pause/reassign |
+| `get_status` | Agent health + engine info |
+
+### REST Endpoints (Legacy)
+
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| `POST /agents` | Register yourself |
+| `POST /agent-cards` | Submit agent card (preferred registration) |
+| `POST /agents` | Register directly (Director only) |
 | `GET /agents/<id>` | Check your own record |
 | `PUT /agents/<id>` | Update your details |
 | `POST /agents/<id>/heartbeat` | Send heartbeat |
+| `GET /agents/<id>/inbox` | Unified inbox (heartbeat + missions + directives + messages) |
 | `GET /agents/<id>/missions` | List your missions |
 | `PUT /agents/<id>/persona` | Attach a persona |
 | `POST /sitreps` | Report mission status |
 | `GET /sitreps?mission_id=<id>` | Query sitreps for a mission |
-| `GET /sitreps/mission/<id>/latest` | Get latest sitrep |
+| `GET /sitreps/mission/<id>/latest` | Latest sitrep for a mission |
 | `GET /divisions` | List available divisions |
 | `GET /personas` | List available personas |
 | `GET /health` | Check engine health |

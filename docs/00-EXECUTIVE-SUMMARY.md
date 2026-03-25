@@ -78,6 +78,19 @@ This foundation immediately proves: the type system works, persistence works, an
 
 ---
 
+## Next Milestone: MCP Integration
+
+The agent communication layer is migrating from REST polling to **Model Context Protocol (MCP)**. This replaces the current `GET /agents/:id/inbox` polling loop + `X-VALOR-Role` header auth with:
+
+- **Session-based identity** — agents authenticate once on MCP connect, no per-request headers
+- **Typed tool discovery** — agents auto-discover 10 VALOR tools via JSON Schema (check_inbox, accept_mission, submit_sitrep, send_message, etc.)
+- **Server push notifications** — SSE-based real-time mission assignments and directives, with polling fallback
+- **Synchronous execution** — tool calls return results immediately, no async polling loops
+
+The REST API remains for the human dashboard. MCP is agent-facing only. See [`06-MCP-INTEGRATION.md`](06-MCP-INTEGRATION.md) for full design.
+
+---
+
 ## Document Index
 
 | Document | Purpose |
@@ -87,3 +100,4 @@ This foundation immediately proves: the type system works, persistence works, an
 | [`03-ARCHITECTURE.md`](03-ARCHITECTURE.md) | 7-layer integration architecture with TypeScript interfaces and mermaid diagrams |
 | [`04-GAPS.md`](04-GAPS.md) | Use-as-is / needs-rework / build-new / deprecate categorization |
 | [`05-BUILD-PLAN.md`](05-BUILD-PLAN.md) | Phased build order, migration path, rollback plan, starter scaffold |
+| [`06-MCP-INTEGRATION.md`](06-MCP-INTEGRATION.md) | MCP server design, tool schemas, migration from REST polling |

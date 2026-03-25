@@ -44,11 +44,13 @@ Phase 0: Foundation            [~5 days]  ── Unblocks everything
   │           │     │
   │           │     └── Phase 4: VECTOR + Governance  [~4-5 days]  ── Decision layer
   │           │
-  │           └── Phase 5: Dashboard  [~8-10 days]  ── Director visibility
+  │           ├── Phase 5: Dashboard  [~8-10 days]  ── Director visibility
+  │           │
+  │           └── Phase 7: MCP Integration  [~12 days]  ── Agent comms via MCP
   │
   └── Phase 6: Mira Migration  [~5-7 days]  ── Prove it works
                                 ──────────
-                          Total: ~37-48 days
+                          Total: ~49-60 days
 ```
 
 ---
@@ -482,6 +484,68 @@ engine/
 | `src/utils/logger.ts` | Structured JSON logger (shared across all engine code) |
 | `src/utils/config.ts` | Env var loader with Zod validation |
 | `src/index.ts` | Minimal Hono server with `/health` endpoint, wires DB + EventBus |
+
+---
+
+---
+
+### Phase 7: MCP Integration
+
+**What gets built:** MCP server exposing VALOR tools, SSE transport, session management, event bus→notification bridge. Replaces agent-facing REST polling with Model Context Protocol.
+
+**What it unblocks:** Eliminates polling overhead, removes X-VALOR-Role header complexity, enables automatic tool discovery for Claude Code agents.
+
+**Dependencies:** Phase 2 (mission lifecycle), Phase 0 (types, DB, event bus). Can start after Phase 2; runs in parallel with Phases 4-6.
+
+**Estimated effort:** ~4 weeks (phased internally)
+
+#### Deliverables
+
+| Item | Description | Est. |
+|------|------------|------|
+| **MCP server + SSE transport** | Hono-mounted at `/mcp`, streamable HTTP transport | 2d |
+| **Session manager** | 30-min timeout, implicit heartbeat, reconnection | 1d |
+| **Core tools (5)** | check_inbox, accept_mission, submit_sitrep, send_message, get_status | 3d |
+| **Full tool surface (5)** | get_mission_brief, complete_mission, submit_artifacts, request_escalation, acknowledge_directive | 2d |
+| **Notification bridge** | Event bus → SSE push for mission assignments, directives, messages | 1d |
+| **Agent migration** | Update SKILL.md, build reference MCP client config, migrate one agent | 2d |
+| **REST deprecation** | Mark agent-facing REST endpoints deprecated, remove X-VALOR-Role auth | 1d |
+
+#### Milestone Test
+
+- Agent connects via MCP, discovers 10 tools via JSON Schema
+- Agent calls check_inbox, receives pending missions
+- Agent accepts mission, submits sitreps, completes mission — all via MCP tools
+- SSE notification pushes mission assignment to connected agent
+- Agent reconnects after disconnect, resumes without data loss
+- X-VALOR-Role headers no longer required for MCP-connected agents
+
+#### New Dependency
+
+```json
+{ "@modelcontextprotocol/sdk": "^1.x" }
+```
+
+#### File Structure
+
+```
+src/mcp/
+├── server.ts              # MCP server setup, tool registration, transport
+├── session-manager.ts     # Session lifecycle, timeouts, reconnection
+├── tools/
+│   ├── inbox.ts           # check_inbox
+│   ├── missions.ts        # accept_mission, get_mission_brief, complete_mission
+│   ├── sitreps.ts         # submit_sitrep
+│   ├── comms.ts           # send_message
+│   ├── status.ts          # get_status
+│   ├── artifacts.ts       # submit_artifacts
+│   ├── escalation.ts      # request_escalation
+│   └── directives.ts      # acknowledge_directive
+├── notifications.ts       # Event bus → MCP notification bridge
+└── auth.ts                # Agent identity resolution for MCP sessions
+```
+
+See [`06-MCP-INTEGRATION.md`](06-MCP-INTEGRATION.md) for full tool schemas and migration path.
 
 ---
 

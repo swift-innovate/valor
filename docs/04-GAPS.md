@@ -296,7 +296,31 @@ Capabilities that don't exist in any current component.
 
 ---
 
-### 5. Memory Layer (Namespaced State)
+### 5. MCP Server (Agent Communication Layer)
+
+**What it does:** Replaces agent-facing REST polling (`GET /agents/:id/inbox`) with Model Context Protocol. Agents connect via streamable HTTP (SSE), authenticate once per session, and interact through 10 typed MCP tools. The event bus bridges to MCP notifications for server→client push.
+
+**Why needed:** Current agent loop requires repeated HTTP polling with manual `X-VALOR-Role` headers. No tool discovery — agents must be pre-programmed with REST API shape. No synchronous request-response for actions (submit sitrep → poll for result). MCP solves all of these natively.
+
+**Architectural layer:** Communication Bus (Layer 6) — transport extension
+
+**Estimated scope:** Medium (12 days, phased internally over 4 weeks)
+
+**Dependencies:** Core Engine (event bus), Mission Lifecycle (repos), Phase 0 types
+
+**Key deliverables:**
+- MCP server mounted on Hono at `/mcp` (SSE transport)
+- Session manager with 30-min timeout, implicit heartbeat, reconnection
+- 10 MCP tools: check_inbox, accept_mission, submit_sitrep, send_message, get_mission_brief, complete_mission, submit_artifacts, request_escalation, acknowledge_directive, get_status
+- Event bus → MCP notification bridge (mission assignments, directives, messages)
+- Agent identity resolution replacing X-VALOR-Role headers
+- Single new dependency: `@modelcontextprotocol/sdk`
+
+See `docs/06-MCP-INTEGRATION.md` for full tool schemas and migration path.
+
+---
+
+### 6. Memory Layer (Namespaced State)
 
 **What it does:** Per-division isolated state with cross-division read policies and Director-controlled access gates.
 

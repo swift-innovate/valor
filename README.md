@@ -42,13 +42,27 @@ The provider layer is runtime-agnostic. Add custom adapters by implementing the 
 pnpm test
 ```
 
+## Agent Communication
+
+Agents connect via **MCP (Model Context Protocol)** — the recommended method:
+
+```
+POST /mcp  →  initialize with callsign + agent_key
+           →  10 typed tools auto-discovered (check_inbox, accept_mission, submit_sitrep, ...)
+           →  Session-based auth, no per-request headers
+           →  Every tool call = implicit heartbeat
+```
+
+REST endpoints remain available for the dashboard and backward compatibility. See [`SKILL.md`](SKILL.md) for the full agent integration guide.
+
 ## API
 
 Default port: `3200`
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /health` | Engine health + provider status |
+| `POST /mcp` | **MCP server** — agent communication (recommended) |
+| `GET /health` | Engine health + provider + MCP status |
 | `GET /providers` | Registered provider list |
 | `GET /skill.md` | Agent integration guide (live markdown) |
 | `/agent-cards/*` | Agent registration cards + approval flow |

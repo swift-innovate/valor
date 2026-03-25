@@ -22,6 +22,7 @@ import { initOrchestratorListeners } from "./orchestrator/index.js";
 import { seedDefaultOathRules } from "./vector/index.js";
 import { seedDefaultUser } from "./db/repositories/index.js";
 import { registerSigintOutcomeCallback } from "./callbacks/sigint-outcome.js";
+import { createMcpRoutes, startMcp, stopMcp, mcpStatus } from "./mcp/index.js";
 
 const app = new Hono();
 const startTime = Date.now();
@@ -47,6 +48,7 @@ app.get("/health", async (c) => {
     bus_subscribers: subscriberCount(),
     providers,
     active_streams: getActiveSessions().length,
+    mcp: mcpStatus(),
     timestamp: new Date().toISOString(),
     skill_url: "/skill.md",
     quickstart_url: "/docs/agent-quickstart.md",
@@ -70,6 +72,9 @@ app.route("/agent-cards", agentCardRoutes);
 app.route("/comms", commsRoutes);
 app.route("/artifacts", artifactRoutes);
 app.route("/initiatives", initiativeRoutes);
+
+// MCP server for agent communication (replaces REST polling for agents)
+app.route("/mcp", createMcpRoutes());
 
 // Dashboard — protected
 app.use("/dashboard/*", requireAuth);
@@ -147,6 +152,9 @@ registerSigintOutcomeCallback();
 // Start stream health monitor
 startHealthMonitor();
 
+// Start MCP server (session cleanup + notification bridge)
+startMcp();
+
 // Start NATS subscriber for dashboard real-time updates
 import { natsSubscriber } from "./dashboard/nats-subscriber.js";
 const natsUrl = process.env.NATS_URL || "nats://localhost:4222";
@@ -172,6 +180,7 @@ attachWebSocket(server as unknown as Server);
 // Graceful shutdown
 async function shutdown() {
   logger.info("Shutting down...");
+  stopMcp();
   closeWebSocket();
   stopHealthMonitor();
   missionTimeoutMonitor.stop();

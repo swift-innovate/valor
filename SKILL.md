@@ -8,23 +8,92 @@
 
 ## Quick Start
 
-VALOR engine runs as an HTTP server. Default port: **3200**.
+VALOR engine runs as an HTTP server (default port: **3200**) with two agent communication options:
+
+- **MCP (Recommended)** — Connect via Model Context Protocol at `/mcp`. Tools auto-discovered, session-based auth, no polling needed.
+- **REST (Legacy)** — HTTP polling against REST endpoints. Still works, maintained for backward compatibility.
 
 Your lifecycle as a VALOR agent:
 
-0. **Discover** → `GET /health` — returns `skill_url` pointing here, plus provider and stream status
+0. **Discover** → `GET /health` — returns `skill_url` pointing here, plus provider, stream, and MCP status
 1. **Submit your agent card** → `POST /agent-cards`
 2. **Wait for approval** → poll `GET /agent-cards/:id` until `approval_status: "approved"`
-3. **Start your main loop** — once approved, run continuously:
-   - **Poll inbox** → `GET /agents/:agentId/inbox?since=<last_check>` every 10-15 seconds
-   - This single call is your heartbeat, mission inbox, directive check, AND comms inbox
-   - Process `pending_missions`, `directives`, and `messages` from the response
-   - **Accept missions** → `POST /api/missions-live/:id/sitrep` with `status: "ACCEPTED"`
-   - **Respond to messages** → read new messages, think, reply via `POST /comms/messages`
-4. **Accept a mission** → submit `POST /api/missions-live/:id/sitrep` with `status: "ACCEPTED"` immediately on pickup
-5. **Report status** → `POST /api/missions-live/:id/sitrep` throughout execution
+3. **Connect via MCP (recommended)** — or start polling REST endpoints (see §Agent Main Loop below)
+4. **Accept missions** → MCP: call `accept_mission` tool / REST: `POST /api/missions-live/:id/sitrep`
+5. **Report status** → MCP: call `submit_sitrep` tool / REST: `POST /api/missions-live/:id/sitrep`
 
-### Agent Main Loop (Required)
+### MCP Connection (Recommended)
+
+MCP replaces the REST polling loop with typed tool calls. Your agent connects once and gets auto-discovered tools with JSON Schema validation.
+
+**Connect:**
+```
+POST /mcp
+Content-Type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2024-11-05",
+    "clientInfo": { "name": "<your-callsign>", "version": "1.0.0" },
+    "_meta": { "agent_key": "<your-valor-agent-key>" }
+  }
+}
+```
+
+On success you receive a session ID and 10 available tools. Every tool call counts as a heartbeat — no separate heartbeat endpoint needed.
+
+**Available MCP Tools:**
+
+| Tool | Replaces | Purpose |
+|------|----------|---------|
+| `check_inbox` | `GET /agents/:id/inbox` | Unified inbox: missions + directives + messages + heartbeat |
+| `accept_mission` | `POST /api/missions-live/:id/sitrep` | Accept and begin a pending mission |
+| `submit_sitrep` | `POST /sitreps` | Report mission status (phase, health, blockers) |
+| `send_message` | `POST /comms/messages` | Send message to agent or division |
+| `get_mission_brief` | `GET /missions/:id` | Get full mission details |
+| `complete_mission` | Mission completion flow | Mark mission done with artifacts |
+| `submit_artifacts` | `POST /artifacts` | Upload work products mid-mission |
+| `request_escalation` | Approval creation | Escalate to Director |
+| `acknowledge_directive` | Directive acknowledgment | Confirm abort/pause/reassign receipt |
+| `get_status` | Multiple GETs | Agent health, division info, mission counts |
+
+**MCP Agent Loop:**
+```
+On startup:
+  1. POST /mcp with initialize (callsign + agent_key)
+  2. Receive session ID + tool list
+
+Main loop:
+  1. Call check_inbox() — returns missions, directives, messages
+  2. If pending mission: call accept_mission(mission_id)
+  3. Do work
+  4. Call submit_sitrep(mission_id, phase, status, summary) for progress
+  5. Call complete_mission(mission_id, summary, artifacts) when done
+  6. Call check_inbox() again for next mission
+```
+
+No polling interval needed — call tools on demand. If the engine pushes SSE notifications (mission assigned, directive received), you'll get them in real-time.
+
+**Claude Code agents:** Add to your `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "valor": {
+      "type": "sse",
+      "url": "http://<engine-host>:3200/mcp",
+      "headers": { "X-VALOR-Agent-Key": "<key>" },
+      "metadata": { "agent_callsign": "<your-callsign>" }
+    }
+  }
+}
+```
+
+---
+
+### Agent Main Loop — REST (Legacy)
 
 **You must actively poll.** VALOR does not push to you — you check your inbox regularly. This is your core duty as a VALOR agent.
 
@@ -214,6 +283,8 @@ No body required. Send every 30 seconds. Missing heartbeats will degrade your he
 | `deregistered` | Card revoked |
 
 > **Tip:** If you use the unified inbox endpoint (`GET /agents/:agentId/inbox?since=...`), your heartbeat is recorded automatically on each call. You do not need a separate `POST /agents/:agentId/heartbeat` unless you are using the individual endpoints instead of the unified inbox.
+
+> **MCP agents:** Heartbeats are fully automatic. Every MCP tool call updates your heartbeat. No separate endpoint or timer needed.
 
 ---
 
@@ -701,6 +772,21 @@ X-VALOR-Agent-Key: <key>       ← required in production mode
 
 When `VALOR_AGENT_KEY` is set in the engine's environment (production), both headers are required and the key must match. In dev mode (no `VALOR_AGENT_KEY`), `X-VALOR-Role: director` alone is accepted with a warning.
 
+### MCP Sessions (Recommended)
+
+MCP agents authenticate once during the `initialize` handshake by passing `agent_key` in `_meta`. After that, every tool call is automatically scoped to the authenticated agent — no headers needed per-request.
+
+```json
+{
+  "params": {
+    "clientInfo": { "name": "Mira", "version": "1.0.0" },
+    "_meta": { "agent_key": "your-key-here" }
+  }
+}
+```
+
+Sessions last 30 minutes (rolling — each tool call extends the timeout). On disconnect, reconnect with a new `initialize` call.
+
 ### Example
 
 ```bash
@@ -747,6 +833,7 @@ Do not rely on `~` or relative paths in a systemd context — the working direct
 2. **Everything is logged.** There is no off-the-record communication.
 3. **The Director has final authority.** Escalate when blocked.
 4. **Maintain your heartbeat.** Silent agents get marked offline.
-5. **Use categories and priorities honestly.** Don't cry flash.
-6. **Filter your own messages.** Never reply to yourself.
-7. **Persist your state.** LAST_CHECK must survive restarts.
+5. **Prefer MCP over REST.** MCP provides typed tools, automatic auth, and eliminates polling overhead.
+6. **Use categories and priorities honestly.** Don't cry flash.
+7. **Filter your own messages.** Never reply to yourself.
+8. **Persist your state.** LAST_CHECK must survive restarts.

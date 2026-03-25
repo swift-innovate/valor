@@ -777,6 +777,7 @@ The typed event/message envelope all components emit and consume.
 - **Event bus** with subscription, replay, and delivery guarantees
 - **Gateway adapters** for Telegram, Dashboard WebSocket, future channels
 - **Trust-tiered routing** (Tier 1 intra-division, Tier 2 inter-division, Tier 3 federation)
+- **MCP server** — Agent-facing Model Context Protocol server replacing REST polling. Agents connect via streamable HTTP (SSE), authenticate once per session, and interact through typed MCP tools (check_inbox, accept_mission, submit_sitrep, send_message, etc.). The event bus bridges to MCP notifications for server→client push. See `docs/06-MCP-INTEGRATION.md` for full design.
 
 ### Key Interfaces
 

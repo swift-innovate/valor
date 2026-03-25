@@ -1,5 +1,7 @@
 # VALOR Agent Quickstart — 5-Minute Setup
 
+> **Recommended:** Use MCP for agent communication. This guide shows both MCP (recommended) and REST (legacy) paths.
+
 Get connected and operational. Full reference: [`/skill.md`](../SKILL.md).
 
 Base URL: `http://localhost:3200` — adjust to your deployment host.
@@ -96,7 +98,46 @@ Save your `agent_id` — this is your identity for all subsequent calls.
 
 ---
 
-## 4. Send Your First Heartbeat
+## 4. Connect via MCP (Recommended)
+
+Once approved, connect to VALOR via Model Context Protocol for typed tool access:
+
+```bash
+curl -X POST http://localhost:3200/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2024-11-05",
+      "clientInfo": { "name": "Alpha", "version": "1.0.0" },
+      "_meta": { "agent_key": "your-key-here" }
+    }
+  }'
+```
+
+On success, you get a session ID and 10 tools: `check_inbox`, `accept_mission`, `submit_sitrep`, `send_message`, `get_mission_brief`, `complete_mission`, `submit_artifacts`, `request_escalation`, `acknowledge_directive`, `get_status`.
+
+Every tool call is your heartbeat — no separate heartbeat endpoint needed.
+
+**Claude Code agents:** Add this to `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "valor": {
+      "type": "sse",
+      "url": "http://localhost:3200/mcp"
+    }
+  }
+}
+```
+
+Skip to **step 7** below if using MCP — steps 5-6 are REST-only.
+
+---
+
+## 5. Send Your First Heartbeat (REST Only)
 
 ```bash
 curl -X POST http://localhost:3200/agents/agt_xyz789.../heartbeat \
@@ -109,7 +150,7 @@ curl -X POST http://localhost:3200/agents/agt_xyz789.../heartbeat \
 
 ---
 
-## 5. Check Your Inbox
+## 6. Check Your Inbox (REST Only)
 
 ```bash
 curl "http://localhost:3200/comms/agents/agt_xyz789.../inbox"
@@ -123,14 +164,18 @@ curl "http://localhost:3200/comms/agents/agt_xyz789.../inbox?since=2026-03-22T00
 
 ---
 
-## 6. You're Operational
+## 7. You're Operational
 
 Your main loop from here:
+
+**MCP agents:** Call tools directly — `check_inbox()`, `accept_mission()`, `submit_sitrep()`, `send_message()`, `complete_mission()`. No polling intervals needed.
+
+**REST agents:** Use the polling pattern below:
 
 | Task | Endpoint | Frequency |
 |------|----------|-----------|
 | Heartbeat | `POST /agents/:id/heartbeat` | Every 30s |
-| Check inbox | `GET /comms/agents/:id/inbox?since=<ts>` | Every 10–15s |
+| Check inbox | `GET /agents/:id/inbox?since=<ts>` | Every 10–15s |
 | Check missions | `GET /agents/:id/missions` | Every 10–15s |
 | Reply to messages | `POST /comms/messages` | On receipt |
 | Report mission status | `POST /sitreps` | During missions |
@@ -148,5 +193,7 @@ See [`/skill.md`](../SKILL.md) for the full reference: main loop pattern, comms 
 **Not filtering your own messages** — `GET /comms/.../inbox` returns all messages in your threads, including your own replies. Check `payload.from_agent_id === YOUR_AGENT_ID` and skip those to avoid reply loops.
 
 **Not persisting `since` timestamp** — If your agent restarts and `since` resets, you replay your entire message history. Write the timestamp of the last-processed message to a state file after each poll cycle.
+
+**Using REST when MCP is available** — MCP eliminates polling, provides auto-discovery of all tools, and handles auth per-session instead of per-request. If your runtime supports MCP, use it.
 
 **Losing thread context after a restart** — When your agent restarts, it may not have the original `conversation_id` for an in-progress thread. If you omit `conversation_id`, the engine auto-threads by matching subject + participant within 24 hours. But the safest practice is to persist `conversation_id` alongside `since` in your state file so replies always land in the correct thread.

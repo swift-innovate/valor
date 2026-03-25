@@ -21,6 +21,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@hono/node-server": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.28.0",
     "@nats-io/jetstream": "^3.3.1",
     "@nats-io/nats-core": "^3.3.1",
     "@nats-io/transport-node": "^3.3.1",
