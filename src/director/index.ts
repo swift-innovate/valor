@@ -100,3 +100,16 @@ export {
   buildRosterPromptSection,
 } from "./roster.js";
 export type { RegisteredOperative } from "./roster.js";
+export {
+  startDirectorService,
+  stopDirectorService,
+  getServiceState,
+  getHttpServer,
+} from "./service.js";
+export type { DirectorServiceConfig, DirectorServiceState } from "./service.js";
+export {
+  getMetrics,
+  recordClassification,
+  resetMetrics,
+} from "./metrics.js";
+export type { DirectorMetrics } from "./metrics.js";

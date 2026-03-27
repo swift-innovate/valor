@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "director": "node --import tsx scripts/director-service.ts",
+    "director:start": "node --import tsx src/director/service.ts",
     "director:dev": "tsx watch scripts/director-service.ts",
     "director:test": "node --import tsx scripts/test-director-llm.ts",
     "director:smoke": "node --import tsx scripts/smoke-director.ts",
