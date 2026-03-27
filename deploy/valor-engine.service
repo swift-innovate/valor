@@ -1,0 +1,38 @@
+[Unit]
+Description=VALOR Engine — Agent Orchestration Server
+Documentation=https://github.com/sit/valor-engine
+After=network-online.target nats-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=valor
+Group=valor
+WorkingDirectory=/opt/valor-engine
+EnvironmentFile=/opt/valor-engine/.env
+
+ExecStart=/usr/bin/node --import tsx src/index.ts
+ExecReload=/bin/kill -HUP $MAINPID
+
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=valor-engine
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/valor-engine/data
+PrivateTmp=true
+
+# Environment
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

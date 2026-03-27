@@ -1,0 +1,112 @@
+# VALOR Engine — Docker Compose (Production)
+#
+# Services:
+#   valor-engine   — Main orchestration server (port 3200)
+#   nats           — NATS server with JetStream (port 4222)
+#   director       — Director LLM service (NATS consumer, optional)
+#
+# Usage:
+#   cp deploy/.env.production .env    # edit with real values
+#   docker compose -f deploy/docker-compose.yml up -d
+#   docker compose -f deploy/docker-compose.yml up -d valor-engine nats   # without director
+#
+# The director service is optional — it requires Ollama reachable on the network.
+# Start it separately if needed:
+#   docker compose -f deploy/docker-compose.yml up -d director
+
+services:
+  # ── NATS Server ──────────────────────────────────────────────────────────
+  nats:
+    image: nats:2-alpine
+    container_name: valor-nats
+    restart: unless-stopped
+    ports:
+      - "4222:4222"
+      - "8222:8222"    # HTTP monitoring
+    volumes:
+      - nats-data:/data/jetstream
+      - ./nats-server.conf:/etc/nats/nats-server.conf:ro
+    command: ["-c", "/etc/nats/nats-server.conf"]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 15s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    networks:
+      - valor
+
+  # ── VALOR Engine ─────────────────────────────────────────────────────────
+  valor-engine:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: valor-engine
+    restart: unless-stopped
+    ports:
+      - "${VALOR_PORT:-3200}:3200"
+    volumes:
+      - valor-data:/data
+    env_file:
+      - ../.env
+    environment:
+      - NODE_ENV=production
+      - VALOR_PORT=3200
+      - VALOR_DB_PATH=/data/valor.db
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3200/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      - valor
+
+  # ── Director LLM Service ────────────────────────────────────────────────
+  # Optional — processes inbound missions via NATS.
+  # Requires Ollama reachable at OLLAMA_BASE_URL.
+  director:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: valor-director
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      - NODE_ENV=production
+      - NATS_URL=nats://nats:4222
+      - VALOR_DB_PATH=/data/valor.db
+    volumes:
+      - valor-data:/data
+    command: ["node", "--import", "tsx", "scripts/director-service.ts"]
+    depends_on:
+      nats:
+        condition: service_healthy
+      valor-engine:
+        condition: service_healthy
+    healthcheck:
+      # Director is a NATS consumer with no HTTP endpoint — check process is alive
+      test: ["CMD", "sh", "-c", "pgrep -f director-service || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    networks:
+      - valor
+    profiles:
+      - full
+
+volumes:
+  valor-data:
+    driver: local
+  nats-data:
+    driver: local
+
+networks:
+  valor:
+    driver: bridge

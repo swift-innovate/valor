@@ -1,0 +1,38 @@
+[Unit]
+Description=VALOR Director — LLM Mission Processing Service
+Documentation=https://github.com/sit/valor-engine
+After=network-online.target nats-server.service valor-engine.service
+Wants=network-online.target
+Requires=valor-engine.service
+
+[Service]
+Type=simple
+User=valor
+Group=valor
+WorkingDirectory=/opt/valor-engine
+EnvironmentFile=/opt/valor-engine/.env
+
+ExecStart=/usr/bin/node --import tsx scripts/director-service.ts
+
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=3
+StartLimitIntervalSec=120
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=valor-director
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/valor-engine/data
+PrivateTmp=true
+
+# Environment
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
