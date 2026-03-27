@@ -1,0 +1,66 @@
+name: "VALOR Task"
+description: "Task dispatched by a VALOR operative for autonomous implementation"
+labels: ["valor-task"]
+body:
+  - type: input
+    id: mission-id
+    attributes:
+      label: "VALOR Mission ID"
+      description: "The parent VALOR mission ID (e.g., VM-042)"
+      placeholder: "VM-XXX"
+    validations:
+      required: true
+
+  - type: input
+    id: operative
+    attributes:
+      label: "Requesting Operative"
+      description: "Callsign of the operative that created this task"
+      placeholder: "gage"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Priority"
+      options:
+        - P0 - Critical
+        - P1 - High
+        - P2 - Standard
+        - P3 - Low
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "Task Description"
+      description: "Clear description of what needs to be implemented"
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: "Acceptance Criteria"
+      description: "Checkable criteria for completion"
+      value: |
+        - [ ] Criteria 1
+        - [ ] Criteria 2
+        - [ ] All existing tests pass
+    validations:
+      required: true
+
+  - type: input
+    id: branch-convention
+    attributes:
+      label: "Branch Name"
+      description: "Suggested branch name (auto-generated if blank)"
+      placeholder: "feat/vm-042-description"
+
+  - type: textarea
+    id: context
+    attributes:
+      label: "Additional Context"
+      description: "File paths, related issues, architectural notes"

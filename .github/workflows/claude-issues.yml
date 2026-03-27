@@ -1,0 +1,101 @@
+name: VALOR Claude Code Agent
+
+# Trigger: issue labeled 'claude-auto' or @claude mention in issue comment
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  valor-task:
+    # Gate: only run for 'claude-auto' label or @claude mention
+    if: |
+      (github.event_name == 'issues' && github.event.label.name == 'claude-auto') ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') &&
+       github.actor != 'claude[bot]' && github.actor != 'github-actions[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install -g pnpm && pnpm install --frozen-lockfile
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: "claude-sonnet-4-20250514"
+          # Permissions: code edits, safe git, tests — no destructive ops
+          allowed_tools: |
+            Edit
+            Write
+            Bash(pnpm test:*)
+            Bash(pnpm typecheck:*)
+            Bash(npx vitest:*)
+            Bash(npx tsc:*)
+            Bash(git checkout -b:*)
+            Bash(git add:*)
+            Bash(git commit:*)
+            Bash(git push:*)
+            Bash(git diff:*)
+            Bash(git status:*)
+            Bash(grep:*)
+            Bash(find:*)
+            Bash(cat:*)
+            Bash(head:*)
+            Bash(tail:*)
+            Bash(wc:*)
+          # Custom prompt with VALOR context
+          prompt: |
+            You are a VALOR operative executing a task dispatched through GitHub Issues.
+            Your callsign is "Claude-CI" and you report to the Director.
+
+            RULES:
+            - Read CLAUDE.md for full project context before starting work.
+            - Create a feature branch named after the issue (e.g., feat/vm-042-description).
+            - Write clean TypeScript with strict mode. Follow existing patterns in src/.
+            - Run `pnpm typecheck` and `pnpm test` before committing. Fix any failures.
+            - Commit with conventional commit messages referencing the issue number.
+            - Always use `main` as the base branch. Never use `master`.
+            - Do NOT modify .env, valor.db, or data/ files.
+            - Do NOT install new dependencies without explicit approval in the issue.
+
+            When you open a PR:
+            - Reference the issue with "Closes #<issue-number>" in the PR body.
+            - Include a summary of changes and any test results.
+            - If the issue contains a VALOR Mission ID, include it in the PR title prefix: [VM-XXX].
+
+      - name: Notify VALOR engine
+        if: success()
+        run: |
+          # Post-completion webhook to VALOR (if engine is reachable)
+          VALOR_URL="${{ secrets.VALOR_WEBHOOK_URL }}"
+          if [ -n "$VALOR_URL" ]; then
+            curl -s -X POST "$VALOR_URL/api/webhooks/github" \
+              -H "Content-Type: application/json" \
+              -H "X-GitHub-Event: issue_automated" \
+              -H "X-VALOR-Webhook-Secret: ${{ secrets.VALOR_WEBHOOK_SECRET }}" \
+              -d '{
+                "event": "task_completed",
+                "issue_number": ${{ github.event.issue.number }},
+                "repository": "${{ github.repository }}",
+                "actor": "claude-ci",
+                "run_id": "${{ github.run_id }}"
+              }' || echo "VALOR webhook failed (engine may be offline)"
+          fi
