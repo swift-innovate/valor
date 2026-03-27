@@ -23,9 +23,13 @@ import { seedDefaultOathRules } from "./vector/index.js";
 import { seedDefaultUser } from "./db/repositories/index.js";
 import { registerSigintOutcomeCallback } from "./callbacks/sigint-outcome.js";
 import { createMcpRoutes, startMcp, stopMcp, mcpStatus } from "./mcp/index.js";
+import { startTelegramBot, stopTelegramBot } from "./telegram/index.js";
 
 const app = new Hono();
 const startTime = Date.now();
+
+// Expose start time for Telegram /status command
+(globalThis as Record<string, unknown>).__valor_start_time = startTime;
 
 // Session resolution — runs on every request
 app.use("*", sessionMiddleware);
@@ -170,6 +174,9 @@ missionTimeoutMonitor.start();
 import { agentHealthMonitor } from "./monitors/agent-health.js";
 agentHealthMonitor.start();
 
+// Start Telegram bot gateway (gracefully skips if not configured)
+startTelegramBot();
+
 const server = serve({ fetch: app.fetch, port: config.port }, () => {
   logger.info("VALOR engine started", {
     port: config.port,
@@ -184,6 +191,7 @@ attachWebSocket(server as unknown as Server);
 // Graceful shutdown
 async function shutdown() {
   logger.info("Shutting down...");
+  stopTelegramBot();
   stopMcp();
   closeWebSocket();
   stopHealthMonitor();
