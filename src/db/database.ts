@@ -16,9 +16,11 @@ export function getAdapter(): DbAdapter {
     adapter = createPostgresAdapter(config.dbPostgresUrl);
     logger.info("Database connected", { backend: "postgres" });
   } else {
-    const dbDir = path.dirname(config.dbPath);
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
+    if (config.dbPath !== ":memory:") {
+      const dbDir = path.dirname(config.dbPath);
+      if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
+      }
     }
     adapter = createSqliteAdapter(config.dbPath);
     logger.info("Database connected", { backend: "sqlite", path: config.dbPath });

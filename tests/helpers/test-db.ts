@@ -1,11 +1,9 @@
-import fs from "fs";
 import { resetDb, runMigrations } from "../../src/db/database.js";
 
-// CRITICAL: Test database path — must NEVER be the production path.
-// This is hardcoded to prevent any possibility of tests erasing live data.
-const TEST_DB_PATH = "./data/valor-test.db";
-
-/** Reset DB singleton, delete the TEST db file, and re-run migrations for a clean slate. */
+/**
+ * Reset DB singleton and re-run migrations for a clean slate.
+ * Uses :memory: SQLite databases (set in setup.ts) to avoid WSL disk I/O issues.
+ */
 export function freshDb() {
   // Safety check — refuse to touch production database
   const currentPath = process.env.VALOR_DB_PATH ?? "";
@@ -17,17 +15,9 @@ export function freshDb() {
   }
 
   resetDb();
-  for (const suffix of ["", "-wal", "-shm"]) {
-    const f = TEST_DB_PATH + suffix;
-    if (fs.existsSync(f)) fs.unlinkSync(f);
-  }
   runMigrations();
 }
 
 export function cleanupDb() {
   resetDb();
-  for (const suffix of ["", "-wal", "-shm"]) {
-    const f = TEST_DB_PATH + suffix;
-    if (fs.existsSync(f)) fs.unlinkSync(f);
-  }
 }
