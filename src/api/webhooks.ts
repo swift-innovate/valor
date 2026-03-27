@@ -82,7 +82,7 @@ webhookRoutes.post("/github", async (c) => {
         return c.json({ status: "ignored", event: githubEvent });
     }
   } catch (err) {
-    logger.error(`[webhooks] Error processing ${githubEvent}:`, err);
+    logger.error(`[webhooks] Error processing ${githubEvent}:`, { error: err instanceof Error ? err.message : String(err) });
     return c.json({ error: "Webhook processing failed" }, 500);
   }
 });
@@ -155,7 +155,7 @@ async function handleIssueEvent(c: any, payload: any) {
   logger.info(`[webhooks] Issue #${issueNumber} closed for mission ${missionId}`);
 
   // If the mission isn't already complete, mark it
-  const mission = natsState.missions.get(missionId);
+  const mission = natsState.getMission(missionId);
   if (mission && mission.status !== "complete") {
     await publishMissionSitrep(missionId, extractOperative(issueBody), {
       status: "COMPLETE",
@@ -222,9 +222,9 @@ async function publishMissionSitrep(
   };
 
   try {
-    await publishSitrep(sitrep);
+    await publishSitrep(nc, "webhook", sitrep);
     logger.info(`[webhooks] Published sitrep for ${missionId}: ${payload.status}`);
   } catch (err) {
-    logger.error(`[webhooks] Failed to publish sitrep for ${missionId}:`, err);
+    logger.error(`[webhooks] Failed to publish sitrep for ${missionId}:`, { error: err instanceof Error ? err.message : String(err) });
   }
 }
