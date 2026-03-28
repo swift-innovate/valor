@@ -1,0 +1,89 @@
+# VALOR Engine — Starbase Deployment
+#
+# Starbase-specific overlay: connects to existing NATS and Herd Pro containers
+# already running on the host. No need to spin up our own NATS.
+#
+# Usage:
+#   cd /opt/valor-engine
+#   docker compose -f deploy/docker-compose.starbase.yml up -d
+#   docker compose -f deploy/docker-compose.starbase.yml up -d --build   # rebuild image
+#   docker compose -f deploy/docker-compose.starbase.yml logs -f         # watch logs
+#
+# With Director service:
+#   docker compose -f deploy/docker-compose.starbase.yml --profile full up -d
+
+services:
+  # ── VALOR Engine ─────────────────────────────────────────────────────────
+  valor-engine:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: valor-engine
+    restart: unless-stopped
+    ports:
+      - "3200:3200"
+    volumes:
+      - valor-data:/data
+    env_file:
+      - ../.env
+    environment:
+      - NODE_ENV=production
+      - VALOR_PORT=3200
+      - VALOR_DB_PATH=/data/valor.db
+      # Connect to existing NATS container on nats_default network
+      - NATS_URL=nats://nats:4222
+      # Herd Pro is port-mapped on host :40114
+      - OLLAMA_BASE_URL=http://host.docker.internal:40114
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3200/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      - nats_default
+
+  # ── Director LLM Service ────────────────────────────────────────────────
+  # Optional — processes inbound missions via NATS.
+  director:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: valor-director
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      - NODE_ENV=production
+      - NATS_URL=nats://nats:4222
+      - VALOR_DB_PATH=/data/valor.db
+      - OLLAMA_BASE_URL=http://host.docker.internal:40114
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - valor-data:/data
+    command: ["node", "--import", "tsx", "scripts/director-service.ts"]
+    depends_on:
+      valor-engine:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "pgrep -f director-service || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    networks:
+      - nats_default
+    profiles:
+      - full
+
+volumes:
+  valor-data:
+    driver: local
+
+# Connect to existing networks on Starbase
+networks:
+  nats_default:
+    external: true
