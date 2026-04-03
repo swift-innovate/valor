@@ -20,6 +20,7 @@ import { subscribe } from "../bus/index.js";
 import { estimateCost } from "../providers/cost.js";
 import type { Mission } from "../types/index.js";
 import { dispatchWebhook } from "../dispatch/webhook.js";
+import { executeInternalMission } from "../execution/index.js";
 import { config } from "../config.js";
 
 /** Resolve which agent should execute a mission.
@@ -159,6 +160,47 @@ export async function dispatchMission(missionId: string): Promise<{
     return {
       dispatched: result.delivered,
       reason: result.delivered ? `Dispatched to agent ${agent.callsign} via webhook` : `Webhook delivery failed: ${result.error}`,
+      mission: getMission(missionId)!,
+    };
+  }
+
+  // ── Path C: internal agent → operative loop ─────────────────────
+  if (agent && !agent.endpoint_url && agent.runtime === "internal") {
+    transitionMission(missionId, "dispatched");
+
+    appendAuditEntry({
+      entity_type: "mission",
+      entity_id: missionId,
+      operation: "update",
+      before_state: JSON.stringify({ status: "gated" }),
+      after_state: JSON.stringify({ status: "dispatched", agent: agent.id, mode: "internal" }),
+      actor_id: "orchestrator",
+    });
+
+    publish({
+      type: "mission.dispatched",
+      source: { id: "orchestrator", type: "system" },
+      target: { id: agent.id, type: "agent" },
+      conversation_id: null,
+      in_reply_to: null,
+      payload: { mission_id: missionId, agent_id: agent.id, mode: "internal" },
+      metadata: null,
+    });
+
+    // Fire and forget — the operative agent manages its own lifecycle
+    // and publishes sitreps through the event bus
+    executeInternalMission(missionId, agent.id).catch((err) => {
+      logger.error("Internal mission execution failed", {
+        mission_id: missionId,
+        agent_id: agent.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      handleMissionFailure(missionId, err instanceof Error ? err.message : String(err));
+    });
+
+    return {
+      dispatched: true,
+      reason: `Dispatched to internal agent ${agent.callsign}`,
       mission: getMission(missionId)!,
     };
   }

@@ -2,7 +2,7 @@
 
 > Unified AI Agent Orchestration Platform
 
-VALOR Engine is a standalone orchestration authority for AI agent fleets. It manages missions, control gates, stream supervision, divisions, and decision checkpoints — without hosting or running agents directly.
+VALOR Engine is an autonomous AI agent orchestration platform. It manages missions, control gates, stream supervision, divisions, and decision checkpoints — and can execute missions internally through multi-phase operative agents.
 
 ## Quick Start
 
@@ -13,17 +13,81 @@ pnpm install
 pnpm dev
 ```
 
-## Architecture
+## Execution Architecture
+
+VALOR dispatches missions through three paths depending on the agent's configuration:
+
+```
+                    ┌─────────────────────┐
+                    │    Orchestrator      │
+                    │  gates → classify →  │
+                    │     dispatch         │
+                    └──┬───────┬────────┬──┘
+                       │       │        │
+               Path A  │ Path C│  Path B│
+              webhook  │internal│ stream │
+                       │       │        │
+                  ┌────▼──┐ ┌──▼─────────────────────────┐ ┌────▼────┐
+                  │Webhook│ │   OperativeAgent (Phase 1)  │ │ Direct  │
+                  │  POST │ │ Observe→Plan→Act→Validate→  │ │ Stream  │
+                  └───────┘ │ Reflect→Evolve              │ └─────────┘
+                            └──┬──────────────┬───────────┘
+                               │              │
+                       ┌───────▼──────┐ ┌─────▼──────────────┐
+                       │    Engram    │ │   Sub-agents        │
+                       │  (Phase 3)  │ │   (Phase 4)         │
+                       │  per-agent  │ │  parallel fan-out    │
+                       │  .engram    │ │  cheaper models      │
+                       │  files      │ │  read-only memory    │
+                       └─────────────┘ └──────────────────────┘
+                               │              │
+                       ┌───────▼──────────────▼───────────┐
+                       │      Provider Registry           │
+                       │  Ollama (5090/4080/4070)          │
+                       │  + Anthropic + OpenAI             │
+                       └──────────────┬───────────────────┘
+                                      │
+                       ┌──────────────▼───────────────────┐
+                       │         Event Bus                │
+                       │  sitreps → dashboard + Telegram  │
+                       └──────────────────────────────────┘
+```
+
+- **Path A (webhook):** Agent has an `endpoint_url` — mission brief POSTed to the external agent
+- **Path B (direct stream):** No agent — single LLM call streamed through a provider
+- **Path C (internal):** Agent with `runtime: "internal"` — full 6-phase operative loop runs in-process
+
+### Internal Execution Stack
+
+| Layer | What it does |
+|-------|-------------|
+| **OperativeAgent** | Runs the Observe→Plan→Act→Validate→Reflect→Evolve loop per mission |
+| **Engram** | Per-agent memory via `.engram` SQLite files in `data/engram/` — recall in Observe, retain in Reflect |
+| **Sub-agents** | Parallel fan-out from the Act phase — concurrent scoped LLM calls on cheaper models with read-only parent memory |
+| **Provider Registry** | Routes LLM calls to Ollama (multi-GPU), Anthropic, or OpenAI based on model and capability |
+| **Event Bus** | Sitreps published after each phase — consumed by dashboard, Telegram, and monitors |
+
+### Agent Runtime Types
+
+| Runtime | Dispatch | Use case |
+|---------|----------|----------|
+| `internal` | In-process operative loop | Autonomous agents managed by the engine |
+| `openclaw` | Webhook POST | External OpenClaw agents |
+| `ollama` / `claude_api` / `openai_api` | Webhook or direct stream | External agents with specific runtimes |
+| `custom` | Webhook | User-defined external agents |
+
+## Engine Architecture
 
 7-layer engine:
 
 1. **Core Engine** — Mission lifecycle, stream supervision, failure routing, WAL
 2. **Provider Layer** — Claude API, Ollama, OpenClaw, Home Assistant, custom adapters
-3. **Identity Layer** — SSOP-typed persona registry
-4. **Memory Layer** — Namespaced per-division state
-5. **Decision Layer** — VECTOR Method checkpoints and bias scoring
-6. **Communication Bus** — Typed EventEnvelope pub/sub with guaranteed delivery
-7. **Division Schema** — Registration, autonomy policies, escalation rules
+3. **Execution Layer** — Internal OperativeAgent, sub-agent dispatch, Engram memory bridge
+4. **Identity Layer** — SSOP-typed persona registry
+5. **Memory Layer** — Namespaced per-division state + per-agent Engram files
+6. **Decision Layer** — VECTOR Method checkpoints and bias scoring
+7. **Communication Bus** — Typed EventEnvelope pub/sub with guaranteed delivery
+8. **Division Schema** — Registration, autonomy policies, escalation rules
 
 ## Providers
 
@@ -44,7 +108,7 @@ pnpm test
 
 ## Agent Communication
 
-Agents connect via **MCP (Model Context Protocol)** — the recommended method:
+Agents connect via **MCP (Model Context Protocol)** — the recommended method for external agents:
 
 ```
 POST /mcp  →  initialize with callsign + agent_key
@@ -52,6 +116,8 @@ POST /mcp  →  initialize with callsign + agent_key
            →  Session-based auth, no per-request headers
            →  Every tool call = implicit heartbeat
 ```
+
+Internal agents (`runtime: "internal"`) don't use MCP — they execute directly within the engine process and publish sitreps through the event bus.
 
 REST endpoints remain available for the dashboard and backward compatibility. See [`SKILL.md`](SKILL.md) for the full agent integration guide.
 
@@ -62,7 +128,7 @@ Default port: `3200`
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /mcp` | **MCP server** — agent communication (recommended) |
-| `GET /health` | Engine health + provider + MCP status |
+| `GET /health` | Engine health + provider + Engram + MCP status |
 | `GET /providers` | Registered provider list |
 | `GET /skill.md` | Agent integration guide (live markdown) |
 | `/agent-cards/*` | Agent registration cards + approval flow |

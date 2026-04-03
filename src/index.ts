@@ -24,6 +24,7 @@ import { seedDefaultUser } from "./db/repositories/index.js";
 import { registerSigintOutcomeCallback } from "./callbacks/sigint-outcome.js";
 import { createMcpRoutes, startMcp, stopMcp, mcpStatus } from "./mcp/index.js";
 import { startTelegramBot, stopTelegramBot } from "./telegram/index.js";
+import { tickExtraction, tickReflection, closeAllEngram, getEngramStatus } from "./execution/engram-bridge.js";
 
 const app = new Hono();
 const startTime = Date.now();
@@ -53,6 +54,7 @@ app.get("/health", async (c) => {
     providers,
     active_streams: getActiveSessions().length,
     mcp: mcpStatus(),
+    engram_agents: getEngramStatus(),
     timestamp: new Date().toISOString(),
     skill_url: "/skill.md",
     quickstart_url: "/docs/agent-quickstart.md",
@@ -177,7 +179,16 @@ agentHealthMonitor.start();
 // Start Telegram bot gateway (gracefully skips if not configured)
 startTelegramBot();
 
-const server = serve({ fetch: app.fetch, port: config.port }, () => {
+// Start Engram background ticks (extraction + reflection for active agents)
+const engramExtractionInterval = setInterval(() => {
+  tickExtraction().catch(err => logger.debug('Engram extraction tick error', { error: String(err) }));
+}, 60_000);
+
+const engramReflectionInterval = setInterval(() => {
+  tickReflection().catch(err => logger.debug('Engram reflection tick error', { error: String(err) }));
+}, 300_000);
+
+const server = serve({ fetch: app.fetch, hostname: "0.0.0.0", port: config.port }, () => {
   logger.info("VALOR engine started", {
     port: config.port,
     providers: listProviders().map((p) => p.id),
@@ -197,6 +208,9 @@ async function shutdown() {
   stopHealthMonitor();
   missionTimeoutMonitor.stop();
   agentHealthMonitor.stop();
+  clearInterval(engramExtractionInterval);
+  clearInterval(engramReflectionInterval);
+  closeAllEngram();
   await natsSubscriber.stop();
   server.close();
   closeDb();

@@ -14,6 +14,7 @@ export const AgentRuntime = z.enum([
   "ollama",
   "claude_api",
   "openai_api",
+  "internal",
   "custom",
 ]);
 export type AgentRuntime = z.infer<typeof AgentRuntime>;

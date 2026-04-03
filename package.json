@@ -36,6 +36,9 @@
     "ws": "^8.19.0",
     "zod": "^3.24.0"
   },
+  "optionalDependencies": {
+    "engram": ">=0.1.0"
+  },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",

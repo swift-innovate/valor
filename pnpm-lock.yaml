@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  engram: link:../engram
+
 importers:
 
   .:
@@ -32,6 +35,9 @@ importers:
       codex:
         specifier: ^0.2.3
         version: 0.2.3
+      engram:
+        specifier: link:../engram
+        version: link:../engram
       grammy:
         specifier: ^1.41.1
         version: 1.41.1

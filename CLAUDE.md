@@ -10,12 +10,12 @@ This repository contains the collected components of a unified AI agent orchestr
 
 VALOR is a **standalone orchestration engine**. It has NO hard dependencies on the following SIT projects, which are developed and shipped independently:
 
-- **Engram** — A standalone SQLite-based agent memory system (retain/recall/reflect, knowledge graph, trust layer). Engram is NOT part of VALOR. Do not reference Engram schemas, APIs, or patterns when working in this repository. If VALOR needs internal state or memory, it manages that through its own Memory Layer (Layer 4) — which is a simple namespaced state store, NOT Engram.
+- **Engram** — A standalone SQLite-based agent memory system (retain/recall/reflect, knowledge graph, trust layer). Engram is an **optional dependency** of VALOR. When installed, internal agents get per-agent memory (recall/retain/reflect) via `src/execution/engram-bridge.ts`. When not installed, all memory operations silently degrade to no-ops via `nullEngramAdapter`. The engine is fully functional without Engram — no features break, agents just don't remember between missions. Do not add Engram as a hard dependency or static import.
 - **Herd Pro** — A Rust-based unified LLM gateway. Herd Pro is NOT part of VALOR. VALOR's Provider Layer is runtime-agnostic. The included `ollama-adapter.ts` is a protocol-level adapter that speaks the standard Ollama HTTP API. It works with bare Ollama, Herd Pro, or any Ollama-compatible proxy. No SIT project dependency.
 - **Operative** — An independent persona/identity framework. Operative is NOT part of VALOR. VALOR has its own Identity Layer with SSOP-typed persona schemas.
 
 **Why this matters:** When working on VALOR, stay inside VALOR's boundaries. Do not:
-- Import or reference Engram packages, schemas, or memory types
+- Add Engram as a hard (non-optional) dependency or use static top-level imports from it
 - Assume Herd Pro is available or required — always frame provider adapters as protocol-level (Ollama, Anthropic API, OpenAI API, etc.)
 - Drift into Operative's scope for persona management
 - Treat any of these projects as "coming soon" features of VALOR
@@ -361,3 +361,32 @@ docs/
 ```
 
 Each document must be self-contained and readable independently, but they build on each other sequentially.
+
+
+## Architecture Evolution: Internal Operative Execution (April 2026)
+
+The original VALOR architecture assumed all agents were external processes (OpenClaw, webhooks). Experience proved that external agents are unreliable — they go offline, lose context, and can't be orchestrated tightly.
+
+**New capability: Internal OperativeAgent execution (Path C).** Agents registered with `runtime: 'internal'` execute missions in-process using a 6-phase loop (Observe→Plan→Act→Validate→Reflect→Evolve) ported from the valor v2 design prototype. This does NOT change the scope boundary — Engram and Herd Pro remain independent projects. The operative loop is self-contained code within `src/execution/`.
+
+Source material for the port lives in:
+- `G:\Projects\SIT\valor\src\operative\` — OperativeAgent class, phase loop, types
+- `G:\Projects\SIT\operative\src\core\` — Mature patterns for provider routing, sub-agents, Engram adapter (reference only, do not import)
+
+See `tasks/integration-operative-engine.md` for the full implementation spec.
+
+### Key Integration Points
+- The orchestrator (`src/orchestrator/orchestrator.ts`) gains Path C after Path A (webhook) and before Path B (direct stream)
+- Internal agents use valor-engine's existing `ProviderAdapter` interface — no new provider abstraction
+- Phase sitreps publish through the existing event bus (`src/bus/event-bus.ts`)
+- Mission state transitions use the existing state machine (`MISSION_TRANSITIONS` in `src/types/mission.ts`)
+- External agents (Path A webhook) continue to work unchanged
+- NATS remains available infrastructure but is NOT required for internal execution
+
+### Agent Runtime Types
+- `openclaw` — External OpenClaw agent (webhook dispatch)
+- `ollama` / `claude_api` / `openai_api` — External agents with specific runtimes
+- `internal` — **NEW** — Runs inside valor-engine process via OperativeAgent
+- `custom` — User-defined external agent
+
+## Git: Always use `main` as default branch (never `master`). Include `git branch -M main` after `git init`.
