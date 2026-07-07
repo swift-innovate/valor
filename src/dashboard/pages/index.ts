@@ -11,3 +11,6 @@ export { artifactsPage } from "./artifacts.js";
 export { loginPage } from "./login.js";
 export { usersPage } from "./users.js";
 export { initiativesPage } from "./initiatives.js";
+export { folderAgentsPage } from "./folder-agents.js";
+export { folderMissionsPage } from "./folder-missions.js";
+export { folderOverviewPage } from "./folder-overview.js";

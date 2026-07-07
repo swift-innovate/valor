@@ -15,6 +15,11 @@ const ConfigSchema = z.object({
   directorConfidenceThreshold: z.coerce.number().min(0).max(10).default(5),
   natsUrl: z.string().default("nats://localhost:4222"),
   disabledGates: z.string().default("").transform((s) => s.split(",").map((g) => g.trim()).filter(Boolean)),
+  storeBackend: z.enum(["folder", "sqlite"]).default("folder"),
+  agentsDir: z.string().default("./agents"),
+  missionsDir: z.string().default("./missions"),
+  adminUsername: z.string().min(1).default("director"),
+  adminPassword: z.string().optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -34,4 +39,9 @@ export const config: Config = ConfigSchema.parse({
   directorConfidenceThreshold: process.env.DIRECTOR_CONFIDENCE_THRESHOLD,
   natsUrl: process.env.NATS_URL,
   disabledGates: process.env.DISABLED_GATES,
+  storeBackend: process.env.STORE_BACKEND,
+  agentsDir: process.env.AGENTS_DIR,
+  missionsDir: process.env.MISSIONS_DIR,
+  adminUsername: process.env.VALOR_ADMIN_USER,
+  adminPassword: process.env.VALOR_ADMIN_PASSWORD,
 });

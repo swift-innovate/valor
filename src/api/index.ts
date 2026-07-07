@@ -12,3 +12,5 @@ export { authRoutes } from "./auth.js";
 export { userRoutes } from "./users.js";
 export { initiativeRoutes } from "./initiatives.js";
 export { webhookRoutes } from "./webhooks.js";
+export { folderAgentRoutes } from "./folder-agents.js";
+export { folderMissionRoutes } from "./folder-missions.js";

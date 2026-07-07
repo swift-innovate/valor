@@ -13,7 +13,7 @@ import {
   createOllamaAdapter,
 } from "./providers/index.js";
 import { getActiveSessions, stopHealthMonitor, startHealthMonitor } from "./stream/index.js";
-import { missionRoutes, missionsLiveRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes, sitrepRoutes, agentCardRoutes, commsRoutes, artifactRoutes, authRoutes, userRoutes, initiativeRoutes } from "./api/index.js";
+import { missionRoutes, missionsLiveRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes, sitrepRoutes, agentCardRoutes, commsRoutes, artifactRoutes, authRoutes, userRoutes, initiativeRoutes, folderAgentRoutes, folderMissionRoutes } from "./api/index.js";
 import { dashboardRoutes } from "./dashboard/index.js";
 import { loginPage } from "./dashboard/pages/index.js";
 import { sessionMiddleware, requireAuth } from "./auth/index.js";
@@ -79,6 +79,13 @@ app.route("/comms", commsRoutes);
 app.route("/artifacts", artifactRoutes);
 app.route("/initiatives", initiativeRoutes);
 
+// Folder-backed store routes — mounted when storeBackend === 'folder'
+if (config.storeBackend === 'folder') {
+  app.route('/api/folder/agents', folderAgentRoutes);
+  app.route('/api/folder/missions', folderMissionRoutes);
+  logger.info('Folder-based store routes mounted', { agentsDir: config.agentsDir, missionsDir: config.missionsDir });
+}
+
 // MCP server for agent communication (replaces REST polling for agents)
 app.route("/mcp", createMcpRoutes());
 
@@ -88,7 +95,7 @@ app.route("/dashboard", dashboardRoutes);
 
 // Agent skill document — served as raw markdown for agent onboarding
 // Usage: point any agent at http://host:3200/skill.md
-import { readFileSync } from "fs";
+import { readFileSync, mkdirSync } from "fs";
 import { resolve } from "path";
 
 const skillMdPath = resolve(import.meta.dirname ?? ".", "..", "SKILL.md");
@@ -129,6 +136,11 @@ app.get("/providers", (c) => {
     })),
   );
 });
+
+// Ensure missions directory exists when using folder store
+if (config.storeBackend === 'folder') {
+  mkdirSync(resolve(config.missionsDir), { recursive: true });
+}
 
 // Initialize
 runMigrations();
