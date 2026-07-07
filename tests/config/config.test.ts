@@ -17,4 +17,11 @@ describe("Config", () => {
       "vector_checkpoint",
     ]);
   });
+
+  it("model policy has neutral defaults", () => {
+    expect(config.defaultModel).toBe("ollama/gemma3:12b");
+    expect(config.claudeDefaultModel).toBe("claude-sonnet-4-5");
+    expect(config.analystModel).toBe("qwen3:latest");
+    expect(config.directorModel).toBe("gemma3:27b");
+  });
 });

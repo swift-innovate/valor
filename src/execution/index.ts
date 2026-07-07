@@ -45,6 +45,7 @@ import { createBuiltinTools } from './tools.js';
 import { AgentLoader, AgentWriter } from '../store/agent-store.js';
 import { MissionLoader, MissionWriter } from '../store/mission-store.js';
 import { isValidAgentId, isValidMissionId } from '../store/ids.js';
+import { stripProviderPrefix } from '../utils/model.js';
 import type { MissionBrief, PhaseResult } from './types.js';
 import type { Mission } from '../types/index.js';
 
@@ -216,7 +217,7 @@ export async function executeFolderMission(
   // or "ollama/gemma3:12b"). Strip the prefix for provider matching since the registry
   // stores bare model names.
   const rawModel = config.modelAssignment['default'];
-  const model = rawModel?.includes('/') ? rawModel.split('/').slice(1).join('/') : rawModel;
+  const model = rawModel ? stripProviderPrefix(rawModel) : rawModel;
   const provider = getBestProvider({ model });
   if (!provider) {
     throw new Error(`No provider available for model "${model ?? 'unspecified'}"`);

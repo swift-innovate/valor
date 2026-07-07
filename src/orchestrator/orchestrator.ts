@@ -1,4 +1,5 @@
 import { logger } from "../utils/logger.js";
+import { stripProviderPrefix } from "../utils/model.js";
 import { publish } from "../bus/index.js";
 import {
   getMission,
@@ -245,7 +246,7 @@ export async function dispatchMission(missionId: string): Promise<{
   const systemPrompt = `You are executing a mission.\nTitle: ${dispatched.title}\nObjective: ${dispatched.objective}${dispatched.constraints.length ? `\nConstraints:\n${dispatched.constraints.map((c) => `- ${c}`).join("\\n")}` : ""}${dispatched.deliverables.length ? `\nDeliverables:\n${dispatched.deliverables.map((d) => `- ${d}`).join("\\n")}` : ""}${dispatched.success_criteria.length ? `\nSuccess criteria:\n${dispatched.success_criteria.map((s) => `- ${s}`).join("\\n")}` : ""}`;
 
   const stream = provider.stream({
-    model: agent?.model ?? "claude-sonnet-4-5",
+    model: stripProviderPrefix(agent?.model ?? config.defaultModel),
     messages: [{ role: "user", content: dispatched.objective }],
     max_tokens: 4096,
     system: systemPrompt,

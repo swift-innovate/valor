@@ -1,4 +1,5 @@
 import type { Agent, Division } from '../types/index.js';
+import { config as engineConfig } from '../config.js';
 import type { OperativeConfig } from './types.js';
 
 /**
@@ -34,7 +35,7 @@ export function defaultOperativeConfig(
       retainOnPhases: ['reflect'],
     },
     modelAssignment: {
-      default: agent.model ?? 'ollama/gemma3:12b',
+      default: agent.model ?? engineConfig.defaultModel,
     },
     tools: { enabled: [], disabled: [] },
   };

@@ -45,6 +45,7 @@ import {
   MAX_RETRIES,
 } from "./verdicts.js";
 import { logger } from "../utils/logger.js";
+import { config } from "../config.js";
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -54,7 +55,7 @@ const { values: args } = parseArgs({
   args: process.argv.slice(2),
   options: {
     nats: { type: "string", default: "nats://localhost:4222" },
-    model: { type: "string", default: "qwen3:latest" },
+    model: { type: "string" },
     ollama: { type: "string", default: "http://localhost:11434" },
     "valor-url": { type: "string", default: "http://localhost:3200" },
     "heartbeat-interval": { type: "string", default: "30000" },
@@ -63,7 +64,7 @@ const { values: args } = parseArgs({
 });
 
 const NATS_URL = args.nats ?? "nats://localhost:4222";
-const DEFAULT_MODEL = args.model ?? "qwen3:latest";
+const DEFAULT_MODEL = args.model ?? config.analystModel;
 const OLLAMA_BASE_URL = args.ollama ?? "http://localhost:11434";
 const VALOR_BASE_URL = args["valor-url"] ?? "http://localhost:3200";
 const HEARTBEAT_INTERVAL_MS = parseInt(args["heartbeat-interval"] ?? "30000", 10);

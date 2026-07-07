@@ -85,6 +85,7 @@ function seedMissionFolder(missionId: string, title: string, opts?: { status?: s
 
 vi.mock('../../src/config.js', () => ({
   config: {
+    defaultModel: 'ollama/gemma3:12b',
     agentsDir: '',
     missionsDir: '',
     storeBackend: 'folder',

@@ -148,7 +148,7 @@ logger.info("Migrations applied");
 
 // Register providers based on config
 if (config.anthropicApiKey) {
-  registerProvider(createClaudeAdapter({ apiKey: config.anthropicApiKey }));
+  registerProvider(createClaudeAdapter({ apiKey: config.anthropicApiKey, defaultModel: config.claudeDefaultModel }));
 }
 if (config.ollamaBaseUrl) {
   registerProvider(

@@ -13,6 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { logger } from '../utils/logger.js';
+import { config as engineConfig } from '../config.js';
 import type {
   OperativeConfig,
   LoopConfig,
@@ -197,7 +198,7 @@ export const AgentLoader = {
     if (modelComplex) modelAssignment['complex'] = modelComplex;
     if (modelFast) modelAssignment['fast'] = modelFast;
     if (!modelAssignment['default']) {
-      modelAssignment['default'] = 'ollama/gemma3:12b';
+      modelAssignment['default'] = engineConfig.defaultModel;
     }
 
     // Autonomy from agent.md (or legacy rules.md)

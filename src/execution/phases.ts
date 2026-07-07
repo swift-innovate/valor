@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { config as engineConfig } from '../config.js';
+import { stripProviderPrefix } from '../utils/model.js';
 import type { ProviderAdapter, ProviderRequest, ProviderResponse, ToolDefinition } from '../providers/types.js';
 import type {
   ActResult,
@@ -49,9 +51,8 @@ function resolveModel(config: OperativeConfig, taskType: string): string {
   const raw =
     config.modelAssignment[taskType] ??
     config.modelAssignment['default'] ??
-    'ollama/gemma3:12b';
-  // Strip provider prefix (e.g., "anthropic/claude-sonnet-4-20250514" → "claude-sonnet-4-20250514")
-  return raw.includes('/') ? raw.split('/').slice(1).join('/') : raw;
+    engineConfig.defaultModel;
+  return stripProviderPrefix(raw);
 }
 
 function getEngram(ctx: PhaseContext): EngramAdapter {

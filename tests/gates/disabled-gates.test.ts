@@ -7,6 +7,7 @@ import { createMission } from "../../src/db/index.js";
 // Mock config to control disabledGates
 vi.mock("../../src/config.js", () => ({
   config: {
+    defaultModel: 'ollama/gemma3:12b',
     port: 3200,
     dbPath: "./data/valor-test.db",
     logLevel: "error",
