@@ -49,7 +49,7 @@ function loadServiceConfig(): DirectorServiceConfig {
     port: parseInt(process.env.DIRECTOR_SERVICE_PORT ?? "3201", 10),
     natsUrl: process.env.NATS_URL ?? config.natsUrl,
     classifySubject: process.env.DIRECTOR_CLASSIFY_SUBJECT ?? "director.classify",
-    ollamaBaseUrl: config.ollamaBaseUrl ?? "http://starbase:40114",
+    ollamaBaseUrl: config.ollamaBaseUrl ?? "http://localhost:11434",
   };
 }
 

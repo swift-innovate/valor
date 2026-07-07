@@ -81,7 +81,7 @@ async function getOrCreate(agentId: string, callsign: string): Promise<any> {
 
   const dbPath = resolve(engramDir, `${callsign}.engram`);
   const engram = await mod.Engram.create(dbPath, {
-    ollamaUrl: process.env.OLLAMA_BASE_URL ?? process.env.ENGRAM_OLLAMA_URL ?? 'http://starbase:40114',
+    ollamaUrl: process.env.OLLAMA_BASE_URL ?? process.env.ENGRAM_OLLAMA_URL ?? 'http://localhost:11434',
     ...engramOptionOverrides,
   });
 

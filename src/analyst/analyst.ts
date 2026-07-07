@@ -13,7 +13,7 @@
  *
  * Usage:
  *   npx ts-node src/analyst/analyst.ts --nats nats://localhost:4222 --model qwen3:latest
- *   npx ts-node src/analyst/analyst.ts --nats nats://localhost:4222 --ollama http://starbase:40114
+ *   npx ts-node src/analyst/analyst.ts --nats nats://localhost:4222 --ollama http://localhost:11434
  */
 
 import { parseArgs } from "node:util";
@@ -55,7 +55,7 @@ const { values: args } = parseArgs({
   options: {
     nats: { type: "string", default: "nats://localhost:4222" },
     model: { type: "string", default: "qwen3:latest" },
-    ollama: { type: "string", default: "http://starbase:40114" },
+    ollama: { type: "string", default: "http://localhost:11434" },
     "valor-url": { type: "string", default: "http://localhost:3200" },
     "heartbeat-interval": { type: "string", default: "30000" },
   },
@@ -64,7 +64,7 @@ const { values: args } = parseArgs({
 
 const NATS_URL = args.nats ?? "nats://localhost:4222";
 const DEFAULT_MODEL = args.model ?? "qwen3:latest";
-const OLLAMA_BASE_URL = args.ollama ?? "http://starbase:40114";
+const OLLAMA_BASE_URL = args.ollama ?? "http://localhost:11434";
 const VALOR_BASE_URL = args["valor-url"] ?? "http://localhost:3200";
 const HEARTBEAT_INTERVAL_MS = parseInt(args["heartbeat-interval"] ?? "30000", 10);
 const ANALYST_CALLSIGN = "analyst";

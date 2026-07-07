@@ -416,7 +416,7 @@ export async function classifyMission(
             retryError instanceof LlmTimeoutError
               ? "❌ Director LLM failed after 2 timeouts. Mission saved in JetStream. Check Ollama and use /retry."
               : retryError instanceof LlmNetworkError
-                ? `❌ Cannot reach Ollama at ${retryError.url}. Check CITADEL/starbase.`
+                ? `❌ Cannot reach Ollama at ${retryError.url}. Check that the inference endpoint (OLLAMA_BASE_URL) is running.`
                 : `❌ Director LLM error: ${retryError instanceof Error ? retryError.message : String(retryError)}`;
 
           await sendProgressUpdate(nc, mid, "FAILED", errorMsg);
@@ -453,7 +453,7 @@ export async function classifyMission(
           nc,
           mid,
           "FAILED",
-          `❌ Cannot reach Ollama at ${error.url}. Check CITADEL/starbase.`,
+          `❌ Cannot reach Ollama at ${error.url}. Check that the inference endpoint (OLLAMA_BASE_URL) is running.`,
         );
       }
 

@@ -147,3 +147,6 @@
 
 ### Deferred (needs design decision)
 - [ ] storeBackend exclusivity — genuine fork: folder-as-canonical vs SQLite-as-runtime-canonical; affects Director path
+
+### Backlog (from branch triage 2026-07-06)
+- [ ] Telegram diagnostic commands (/logs, /health, /retry) for the grammy bot — idea salvaged from deleted mission/VM-021; old implementation targeted the legacy gateway and was not portable
