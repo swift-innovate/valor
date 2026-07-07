@@ -11,6 +11,10 @@ import {
   listProviders,
   createClaudeAdapter,
   createOllamaAdapter,
+  createCodexCliAdapter,
+  createGrokCliAdapter,
+  detectCodexCli,
+  detectGrokCli,
 } from "./providers/index.js";
 import { getActiveSessions, stopHealthMonitor, startHealthMonitor } from "./stream/index.js";
 import { missionRoutes, missionsLiveRoutes, divisionRoutes, agentRoutes, personaRoutes, decisionRoutes, sitrepRoutes, agentCardRoutes, commsRoutes, artifactRoutes, authRoutes, userRoutes, initiativeRoutes, folderAgentRoutes, folderMissionRoutes } from "./api/index.js";
@@ -149,6 +153,18 @@ logger.info("Migrations applied");
 // Register providers based on config
 if (config.anthropicApiKey) {
   registerProvider(createClaudeAdapter({ apiKey: config.anthropicApiKey, defaultModel: config.claudeDefaultModel }));
+}
+// Subscription-authenticated CLI providers (codex, grok). "auto" registers
+// only when the binary is detected; explicit model lists mean the registry
+// routes codex/grok-prefixed models here. Registered BEFORE ollama so the
+// ollama adapter's match-any behavior stays the catch-all.
+if (config.codexCli !== "off" && (config.codexCli === "on" || await detectCodexCli(config.codexCliPath))) {
+  registerProvider(createCodexCliAdapter({ binPath: config.codexCliPath, models: config.codexModels }));
+  logger.info("Codex CLI provider registered (subscription auth)", { models: config.codexModels });
+}
+if (config.grokCli !== "off" && (config.grokCli === "on" || await detectGrokCli(config.grokCliPath))) {
+  registerProvider(createGrokCliAdapter({ binPath: config.grokCliPath, models: config.grokModels }));
+  logger.info("Grok CLI provider registered (subscription auth)", { models: config.grokModels });
 }
 if (config.ollamaBaseUrl) {
   registerProvider(

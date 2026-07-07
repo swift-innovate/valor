@@ -25,4 +25,6 @@ export {
 export { estimateCost, formatCost, getModelPricing, getContextWindow, listModels } from "./cost.js";
 
 export { createClaudeAdapter, type ClaudeAdapterConfig } from "./adapters/claude-adapter.js";
+export { createCodexCliAdapter, detectCodexCli, type CodexCliAdapterConfig } from "./adapters/codex-cli-adapter.js";
+export { createGrokCliAdapter, detectGrokCli, type GrokCliAdapterConfig } from "./adapters/grok-cli-adapter.js";
 export { createOllamaAdapter, type OllamaAdapterConfig } from "./adapters/ollama-adapter.js";
