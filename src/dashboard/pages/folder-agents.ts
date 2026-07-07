@@ -13,6 +13,7 @@ import path from "node:path";
 import { layout } from "../layout.js";
 import { getAuthUser } from "../../auth/index.js";
 import { config } from "../../config.js";
+import { isValidAgentId } from "../../store/ids.js";
 import { AgentDiscovery, AgentLoader, AgentWriter, RosterManager } from "../../store/agent-store.js";
 import type { AgentSummary } from "../../store/agent-store.js";
 import type { OperativeConfig } from "../../execution/types.js";
@@ -245,6 +246,9 @@ const BTN_SECONDARY = "px-3 py-1.5 text-xs font-medium rounded bg-gray-800 hover
 
 folderAgentsPage.get("/:id", (c) => {
   const agentId = c.req.param("id");
+  if (!isValidAgentId(agentId)) {
+    return c.text("Invalid agent id", 400);
+  }
   const agentsDir = resolve(config.agentsDir);
   const agentPath = resolve(agentsDir, agentId);
 
@@ -530,6 +534,9 @@ folderAgentsPage.get("/:id", (c) => {
 
 folderAgentsPage.post("/:id", async (c) => {
   const agentId = c.req.param("id");
+  if (!isValidAgentId(agentId)) {
+    return c.text("Invalid agent id", 400);
+  }
   const agentsDir = resolve(config.agentsDir);
   const agentPath = resolve(agentsDir, agentId);
   const personaPath = path.join(agentPath, "persona.md");
@@ -591,6 +598,9 @@ folderAgentsPage.post("/:id", async (c) => {
 
 folderAgentsPage.post("/:id/memory/:file", async (c) => {
   const agentId = c.req.param("id");
+  if (!isValidAgentId(agentId)) {
+    return c.text("Invalid agent id", 400);
+  }
   const file = c.req.param("file");
   const agentsDir = resolve(config.agentsDir);
   const agentPath = resolve(agentsDir, agentId);
