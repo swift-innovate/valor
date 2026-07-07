@@ -150,3 +150,4 @@
 
 ### Backlog (from branch triage 2026-07-06)
 - [ ] Telegram diagnostic commands (/logs, /health, /retry) for the grammy bot — idea salvaged from deleted mission/VM-021; old implementation targeted the legacy gateway and was not portable
+- [ ] Launcher seam (docs/LAUNCHER-SEAM.md) — delegate Act to claude-code/codex/grok CLIs; phases L1-L3; open questions in §9 need a call before L1
