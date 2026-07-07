@@ -8,7 +8,7 @@ Copy this template when creating new missions for the VALOR mission board.
 ### VM-XXX: <Title>
 - **Assigned:** <Operative name>
 - **Priority:** P0 | P1 | P2 | P3
-- **Branch:** mission/VM-XXX
+- **Target repo:** <project repo the work lands in, or None for file-only missions>
 - **Depends on:** <VM-XXX, VM-YYY> or None
 - **Description:** <What needs to be done. Be specific enough that the assigned operative can execute without additional clarification. Include file paths, module names, and technical context.>
 - **Acceptance:** <How we know this is done. Measurable, verifiable criteria.>
@@ -38,10 +38,13 @@ Copy this template when creating new missions for the VALOR mission board.
 
 ## Branch Convention
 
-- Branch name: `mission/VM-XXX`
-- Branch from: `main`
-- Merge to: `main` (via PR or Director approval)
-- Delete after merge
+Missions do NOT get branches in valor-engine. Mission state (brief, decisions,
+progress, handoff) lives in the mission folder `missions/VM-XXX/`.
+
+When a mission changes code in a target project:
+- Branch in the **target project's repo**: `mission/VM-XXX` or a conventional feature branch
+- Merge to that repo's `main` via PR or Director approval
+- Delete the branch after merge
 
 ## Commit Convention
 

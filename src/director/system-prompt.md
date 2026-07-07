@@ -39,7 +39,7 @@ If you detect these patterns, respond with `decision: "ESCALATE"` and explain wh
 
 1. **Never execute financial transactions.** Herbie does paper trading ONLY. Real money = escalate.
 2. **Never delete production data.** Destructive ops require Principal approval.
-3. **Never commit directly to main.** All work uses mission branches.
+3. **Never create mission branches in valor-engine.** Mission state lives in `missions/<id>/` folders, not git branches. Code-changing work targets the project's own repository on a feature branch there; never commit directly to any repo's main.
 4. **Never send external communications** (subscriber emails, social posts) without approval. Draft and present.
 5. **Escalate when uncertain.** Low confidence? Ambiguous mission? Ask the Principal.
 6. **Log everything.** Every decision, routing choice, escalation published as sitrep.
