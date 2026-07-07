@@ -8,6 +8,7 @@
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import { natsState } from "./nats-state.js";
+import { logger } from "../utils/logger.js";
 
 export const sseRoutes = new Hono();
 
@@ -61,7 +62,9 @@ sseRoutes.get("/", (c) => {
         await stream.writeln(`data: ${JSON.stringify(data)}`);
         await stream.writeln('');
       } catch (err) {
-        console.error("[SSE] Error sending event:", err);
+        logger.error("[SSE] Error sending event", {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     });
 
@@ -72,7 +75,9 @@ sseRoutes.get("/", (c) => {
         await stream.writeln('data: {"timestamp":"' + new Date().toISOString() + '"}');
         await stream.writeln('');
       } catch (err) {
-        console.error("[SSE] Ping failed:", err);
+        logger.error("[SSE] Ping failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
         clearInterval(pingInterval);
       }
     }, 30000); // Ping every 30 seconds
@@ -81,7 +86,7 @@ sseRoutes.get("/", (c) => {
     stream.onAbort(() => {
       unsubscribe();
       clearInterval(pingInterval);
-      console.log("[SSE] Client disconnected");
+      logger.info("[SSE] Client disconnected");
     });
 
     // Keep the stream open — use a promise that never resolves.

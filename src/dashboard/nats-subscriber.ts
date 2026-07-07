@@ -43,18 +43,18 @@ export class NATSSubscriber {
    */
   async start(natsUrl: string = "nats://localhost:4222"): Promise<void> {
     if (this.connected) {
-      console.log("[NATSSubscriber] Already connected");
+      logger.info("[NATSSubscriber] Already connected");
       return;
     }
 
     try {
-      console.log(`[NATSSubscriber] Connecting to ${natsUrl}...`);
+      logger.info("[NATSSubscriber] Connecting", { natsUrl });
       this.nc = await getNatsConnection({
         servers: [natsUrl],
         name: "dashboard-subscriber",
       });
       this.connected = true;
-      console.log("[NATSSubscriber] Connected to NATS");
+      logger.info("[NATSSubscriber] Connected to NATS");
 
       // Hydrate state from JetStream history before subscribing to live
       await this.hydrateFromJetStream();
@@ -67,9 +67,11 @@ export class NATSSubscriber {
       this.subscribeReviewVerdicts();
       this.subscribeComms();
 
-      console.log("[NATSSubscriber] All subscriptions active");
+      logger.info("[NATSSubscriber] All subscriptions active");
     } catch (err) {
-      console.error("[NATSSubscriber] Connection failed:", err);
+      logger.error("[NATSSubscriber] Connection failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
       this.connected = false;
       throw err;
     }
@@ -106,9 +108,11 @@ export class NATSSubscriber {
             // Skip unparseable
           }
         }
-        console.log(`[NATSSubscriber] Hydrated ${briefCount} mission briefs from JetStream`);
+        logger.info("[NATSSubscriber] Hydrated mission briefs from JetStream", { count: briefCount });
       } catch (err) {
-        console.warn("[NATSSubscriber] Mission brief hydration failed:", err instanceof Error ? err.message : err);
+        logger.warn("[NATSSubscriber] Mission brief hydration failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
 
       // 2. Replay sitreps to restore status/progress on top of the briefs
@@ -131,13 +135,12 @@ export class NATSSubscriber {
         }
       }
 
-      console.log(`[NATSSubscriber] Hydrated ${count} sitreps from JetStream`);
+      logger.info("[NATSSubscriber] Hydrated sitreps from JetStream", { count });
     } catch (err) {
       // Non-fatal — dashboard just won't have history
-      console.warn(
-        "[NATSSubscriber] JetStream hydration failed (dashboard will only show new missions):",
-        err instanceof Error ? err.message : err,
-      );
+      logger.warn("[NATSSubscriber] JetStream hydration failed (dashboard will only show new missions)", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -174,12 +177,14 @@ export class NATSSubscriber {
             });
           }
         } catch (err) {
-          console.error("[NATSSubscriber] Error processing mission brief:", err);
+          logger.error("[NATSSubscriber] Error processing mission brief", {
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       },
     });
     this.subs.push(sub);
-    console.log("[NATSSubscriber] Subscribed to valor.missions.*.pending");
+    logger.info("[NATSSubscriber] Subscribed to valor.missions.*.pending");
   }
 
   /**
@@ -215,12 +220,14 @@ export class NATSSubscriber {
             } catch { /* non-fatal */ }
           }
         } catch (err) {
-          console.error("[NATSSubscriber] Error processing sitrep:", err);
+          logger.error("[NATSSubscriber] Error processing sitrep", {
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       },
     });
     this.subs.push(sub);
-    console.log("[NATSSubscriber] Subscribed to valor.sitreps.>");
+    logger.info("[NATSSubscriber] Subscribed to valor.sitreps.>");
   }
 
   /**
@@ -277,12 +284,14 @@ export class NATSSubscriber {
         try {
           natsState.handleHeartbeat(decode<Heartbeat>(msg));
         } catch (err) {
-          console.error("[NATSSubscriber] Error processing heartbeat:", err);
+          logger.error("[NATSSubscriber] Error processing heartbeat", {
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       },
     });
     this.subs.push(sub);
-    console.log("[NATSSubscriber] Subscribed to valor.system.heartbeat.*");
+    logger.info("[NATSSubscriber] Subscribed to valor.system.heartbeat.*");
   }
 
   /**
@@ -297,12 +306,14 @@ export class NATSSubscriber {
         try {
           natsState.handleSystemEvent(decode<SystemEvent>(msg));
         } catch (err) {
-          console.error("[NATSSubscriber] Error processing system event:", err);
+          logger.error("[NATSSubscriber] Error processing system event", {
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       },
     });
     this.subs.push(sub);
-    console.log("[NATSSubscriber] Subscribed to valor.system.events");
+    logger.info("[NATSSubscriber] Subscribed to valor.system.events");
   }
 
   /**
@@ -317,12 +328,14 @@ export class NATSSubscriber {
         try {
           natsState.handleVerdict(decode<ReviewVerdict>(msg));
         } catch (err) {
-          console.error("[NATSSubscriber] Error processing verdict:", err);
+          logger.error("[NATSSubscriber] Error processing verdict", {
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       },
     });
     this.subs.push(sub);
-    console.log("[NATSSubscriber] Subscribed to valor.review.verdict.*");
+    logger.info("[NATSSubscriber] Subscribed to valor.review.verdict.*");
   }
 
   /**
@@ -337,12 +350,14 @@ export class NATSSubscriber {
         try {
           natsState.handleCommsMessage(decode<CommsMessage>(msg));
         } catch (err) {
-          console.error("[NATSSubscriber] Error processing comms message:", err);
+          logger.error("[NATSSubscriber] Error processing comms message", {
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       },
     });
     this.subs.push(sub);
-    console.log("[NATSSubscriber] Subscribed to valor.comms.>");
+    logger.info("[NATSSubscriber] Subscribed to valor.comms.>");
   }
 
   /**
@@ -358,7 +373,7 @@ export class NATSSubscriber {
       await closeNatsConnection();
       this.nc = null;
       this.connected = false;
-      console.log("[NATSSubscriber] Disconnected from NATS");
+      logger.info("[NATSSubscriber] Disconnected from NATS");
     }
   }
 

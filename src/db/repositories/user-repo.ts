@@ -1,7 +1,10 @@
 import { nanoid } from "nanoid";
 import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { getDb } from "../database.js";
 import { logger } from "../../utils/logger.js";
+import { config } from "../../config.js";
 
 export interface User {
   id: string;
@@ -98,10 +101,26 @@ export function userCount(): number {
   return row?.cnt ?? 0;
 }
 
-/** Seed a default director account if no users exist yet. */
+/** Seed an initial admin account if no users exist yet. */
 export function seedDefaultUser(): void {
   if (userCount() === 0) {
-    createUser({ username: "director", password: "valor", role: "director" });
-    logger.warn("Default director account created (username: director, password: valor) — CHANGE THIS PASSWORD");
+    const username = config.adminUsername;
+    const generated = !config.adminPassword;
+    const password = config.adminPassword ?? randomBytes(16).toString("hex");
+
+    createUser({ username, password, role: "director" });
+
+    if (generated) {
+      // Never log the password — logs get shipped/aggregated. Write it to an
+      // operator-readable file next to the database instead.
+      const credentialPath = join(dirname(config.dbPath), "initial-admin-password.txt");
+      writeFileSync(credentialPath, `${username}:${password}\n`, { mode: 0o600 });
+      logger.warn(
+        "Initial admin account created — no VALOR_ADMIN_PASSWORD set. Generated credential written to file; log in and change it, then delete the file.",
+        { username, credentialPath },
+      );
+    } else {
+      logger.info("Initial admin account created from VALOR_ADMIN_USER/VALOR_ADMIN_PASSWORD", { username });
+    }
   }
 }

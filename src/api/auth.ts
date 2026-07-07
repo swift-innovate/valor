@@ -36,6 +36,7 @@ authRoutes.post("/login", async (c) => {
   setCookie(c, SESSION_COOKIE, session.token, {
     httpOnly: true,
     sameSite: "Lax",
+    secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 7 * 24 * 60 * 60,
   });

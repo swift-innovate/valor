@@ -153,7 +153,9 @@ class NATSStateManager {
       try {
         listener(event, data);
       } catch (err) {
-        console.error("[NATSState] Listener error:", err);
+        logger.error("[NATSState] Listener error", {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   }

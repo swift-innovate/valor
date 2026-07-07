@@ -26,6 +26,7 @@ import {
   listMissions as listDbMissions,
   listArtifactsByConversation,
 } from "../db/index.js";
+import { logger } from "../utils/logger.js";
 
 export const missionsLiveRoutes = new Hono();
 
@@ -132,7 +133,9 @@ missionsLiveRoutes.post("/", async (c) => {
     try {
       await publishMissionBrief(nc, "dashboard", brief);
     } catch (err) {
-      console.error("[missions-live] NATS publish failed:", err);
+      logger.error("[missions-live] NATS publish failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -184,7 +187,9 @@ missionsLiveRoutes.post("/:id/cancel", async (c) => {
     try {
       await publishSitrep(nc, "dashboard", sitrep);
     } catch (err) {
-      console.error("[missions-live] NATS cancel sitrep failed:", err);
+      logger.error("[missions-live] NATS cancel sitrep failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -238,7 +243,9 @@ missionsLiveRoutes.post("/:id/retry", async (c) => {
     try {
       await publishMissionBrief(nc, "dashboard", brief);
     } catch (err) {
-      console.error("[missions-live] NATS retry publish failed:", err);
+      logger.error("[missions-live] NATS retry publish failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
     // Also publish a sitrep noting the retry
@@ -257,7 +264,9 @@ missionsLiveRoutes.post("/:id/retry", async (c) => {
     try {
       await publishSitrep(nc, "dashboard", sitrep);
     } catch (err) {
-      console.error("[missions-live] NATS retry sitrep failed:", err);
+      logger.error("[missions-live] NATS retry sitrep failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -311,7 +320,9 @@ missionsLiveRoutes.post("/:id/reassign", async (c) => {
     try {
       await publishSitrep(nc, "dashboard", cancelSitrep);
     } catch (err) {
-      console.error("[missions-live] NATS reassign cancel sitrep failed:", err);
+      logger.error("[missions-live] NATS reassign cancel sitrep failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
     // Re-publish brief to new operative
@@ -332,7 +343,9 @@ missionsLiveRoutes.post("/:id/reassign", async (c) => {
     try {
       await publishMissionBrief(nc, "dashboard", brief);
     } catch (err) {
-      console.error("[missions-live] NATS reassign brief failed:", err);
+      logger.error("[missions-live] NATS reassign brief failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -424,7 +437,9 @@ missionsLiveRoutes.post("/:id/sitrep", async (c) => {
     try {
       await publishSitrep(nc, operative, sitrep);
     } catch (err) {
-      console.error("[missions-live] sitrep publish failed:", err);
+      logger.error("[missions-live] sitrep publish failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
