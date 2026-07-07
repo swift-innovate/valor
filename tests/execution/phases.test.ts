@@ -11,7 +11,7 @@ import {
   shouldRunEvolve,
 } from '../../src/execution/phases.js';
 import type { PhaseContext } from '../../src/execution/phases.js';
-import type { OperativeConfig, MissionBrief, AgentState } from '../../src/execution/types.js';
+import type { OperativeConfig, MissionBrief, AgentState, ToolAdapter } from '../../src/execution/types.js';
 import type { ProviderAdapter, ProviderHealth } from '../../src/providers/types.js';
 import type { StreamEvent } from '../../src/types/index.js';
 
@@ -181,8 +181,8 @@ describe('runAct', () => {
     expect(result.success).toBe(true);
   });
 
-  it('executes planned action', async () => {
-    const ctx = makeCtx();
+  it('produces an LLM work product for a planned action when no tools are granted', async () => {
+    const ctx = makeCtx('Report drafted: quarterly summary.');
     const plan = {
       phase: 'plan' as const,
       reasoning: 'Do the thing',
@@ -192,12 +192,170 @@ describe('runAct', () => {
 
     const result = await runAct(ctx, plan, 0);
     expect(result.actionId).toBe('action-1');
-    expect(result.output).toContain('Write the report');
+    expect(result.output).toBe('Report drafted: quarterly summary.');
+    expect(result.success).toBe(true);
+    expect(result.toolCalls).toBeUndefined();
+  });
+});
+
+describe('runAct — tool loop (text protocol)', () => {
+  function mockToolAdapter(executed: Array<{ tool: string; params: Record<string, unknown> }>): ToolAdapter {
+    return {
+      isEnabled: (tool) => tool === 'write_file',
+      definitions: () => [
+        {
+          name: 'write_file',
+          description: 'Write a file',
+          input_schema: { type: 'object', properties: {}, required: [] },
+        },
+      ],
+      async execute(tool, params) {
+        executed.push({ tool, params });
+        return { success: true, output: `wrote ${String(params['path'])}` };
+      },
+    };
+  }
+
+  function sequenceProvider(responses: string[]): ProviderAdapter {
+    let call = 0;
+    const base = mockProvider();
+    return {
+      ...base,
+      async complete() {
+        const content = responses[Math.min(call, responses.length - 1)]!;
+        call++;
+        return {
+          content,
+          model: 'mock-model',
+          usage: { input_tokens: 10, output_tokens: 5 },
+          stop_reason: 'end_turn' as const,
+        };
+      },
+    };
+  }
+
+  const plan = {
+    phase: 'plan' as const,
+    reasoning: 'Write the file',
+    actions: [{ id: 'action-1', description: 'Write hello.txt', requiresCheckpoint: false }],
+    needsEscalation: false,
+  };
+
+  it('executes a JSON tool call then finishes with a done report', async () => {
+    const executed: Array<{ tool: string; params: Record<string, unknown> }> = [];
+    const ctx = makeCtx();
+    ctx.tools = mockToolAdapter(executed);
+    ctx.provider = sequenceProvider([
+      '```json\n{"tool": "write_file", "params": {"path": "hello.txt", "content": "hi"}}\n```',
+      '```json\n{"done": true, "success": true, "report": "File written."}\n```',
+    ]);
+
+    const result = await runAct(ctx, plan, 0);
+    expect(executed).toEqual([{ tool: 'write_file', params: { path: 'hello.txt', content: 'hi' } }]);
+    expect(result.output).toBe('File written.');
+    expect(result.success).toBe(true);
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls![0]!.tool).toBe('write_file');
+    expect(result.toolCalls![0]!.success).toBe(true);
+  });
+
+  it('treats an unparseable response as a freeform report', async () => {
+    const executed: Array<{ tool: string; params: Record<string, unknown> }> = [];
+    const ctx = makeCtx();
+    ctx.tools = mockToolAdapter(executed);
+    ctx.provider = sequenceProvider(['I did the thing without needing tools.']);
+
+    const result = await runAct(ctx, plan, 0);
+    expect(executed).toHaveLength(0);
+    expect(result.output).toBe('I did the thing without needing tools.');
+    expect(result.success).toBe(true);
+  });
+
+  it('reports failure when the done report says success false', async () => {
+    const ctx = makeCtx();
+    ctx.tools = mockToolAdapter([]);
+    ctx.provider = sequenceProvider([
+      '```json\n{"done": true, "success": false, "report": "Could not write the file."}\n```',
+    ]);
+
+    const result = await runAct(ctx, plan, 0);
+    expect(result.success).toBe(false);
+    expect(result.output).toBe('Could not write the file.');
+  });
+
+  it('stops with tool_budget_exhausted when the model never finishes', async () => {
+    const executed: Array<{ tool: string; params: Record<string, unknown> }> = [];
+    const ctx = makeCtx();
+    ctx.tools = mockToolAdapter(executed);
+    ctx.provider = sequenceProvider([
+      '```json\n{"tool": "write_file", "params": {"path": "a.txt", "content": "x"}}\n```',
+    ]);
+
+    const result = await runAct(ctx, plan, 0);
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('tool_budget_exhausted');
+    expect(executed.length).toBe(5);
+  });
+
+  it('uses native tool_calls when the provider supports tool use', async () => {
+    const executed: Array<{ tool: string; params: Record<string, unknown> }> = [];
+    const ctx = makeCtx();
+    ctx.tools = mockToolAdapter(executed);
+
+    let call = 0;
+    const base = mockProvider();
+    ctx.provider = {
+      ...base,
+      capabilities: { ...base.capabilities, toolUse: true },
+      async complete(req) {
+        call++;
+        if (call === 1) {
+          expect(req.tools).toHaveLength(1);
+          return {
+            content: '',
+            model: 'mock-model',
+            usage: { input_tokens: 10, output_tokens: 5 },
+            tool_calls: [{ id: 't1', name: 'write_file', input: { path: 'n.txt', content: 'y' } }],
+            stop_reason: 'tool_use' as const,
+          };
+        }
+        return {
+          content: 'Wrote the file natively.',
+          model: 'mock-model',
+          usage: { input_tokens: 10, output_tokens: 5 },
+          stop_reason: 'end_turn' as const,
+        };
+      },
+    };
+
+    const result = await runAct(ctx, plan, 0);
+    expect(executed).toEqual([{ tool: 'write_file', params: { path: 'n.txt', content: 'y' } }]);
+    expect(result.output).toBe('Wrote the file natively.');
+    expect(result.success).toBe(true);
   });
 });
 
 describe('runValidate', () => {
-  it('passes when response does not contain fail', async () => {
+  it('parses a JSON verdict', async () => {
+    const ctx = makeCtx('```json\n{"passed": true, "reasoning": "Criteria met."}\n```');
+    const actResult = { phase: 'act' as const, actionId: 'a1', output: 'Done', success: true };
+
+    const result = await runValidate(ctx, actResult);
+    expect(result.passed).toBe(true);
+    expect(result.reasoning).toBe('Criteria met.');
+    expect(result.retry).toBe(false);
+  });
+
+  it('parses a JSON failure verdict even when prose sounds positive', async () => {
+    const ctx = makeCtx('```json\n{"passed": false, "reasoning": "Output looks great but does not satisfy criterion 1."}\n```');
+    const actResult = { phase: 'act' as const, actionId: 'a1', output: 'Done', success: true };
+
+    const result = await runValidate(ctx, actResult);
+    expect(result.passed).toBe(false);
+    expect(result.retry).toBe(true);
+  });
+
+  it('falls back to heuristic: passes when prose does not contain fail', async () => {
     const ctx = makeCtx('The action passed validation successfully.');
     const actResult = { phase: 'act' as const, actionId: 'a1', output: 'Done', success: true };
 
@@ -207,7 +365,7 @@ describe('runValidate', () => {
     expect(result.retry).toBe(false);
   });
 
-  it('fails when response contains fail', async () => {
+  it('falls back to heuristic: fails when prose contains fail', async () => {
     const ctx = makeCtx('The action failed validation.');
     const actResult = { phase: 'act' as const, actionId: 'a1', output: 'Done', success: true };
 
@@ -218,6 +376,27 @@ describe('runValidate', () => {
 });
 
 describe('runReflect', () => {
+  it('parses a JSON verdict for mission complete', async () => {
+    const ctx = makeCtx('```json\n{"mission_complete": true, "mission_failed": false, "summary": "All objectives met."}\n```');
+    const actResult = { phase: 'act' as const, actionId: 'a1', output: 'Done', success: true };
+    const validation = { phase: 'validate' as const, passed: true, reasoning: 'Good' };
+
+    const result = await runReflect(ctx, actResult, validation);
+    expect(result.missionComplete).toBe(true);
+    expect(result.missionFailed).toBe(false);
+    expect(result.summary).toBe('All objectives met.');
+  });
+
+  it('does not flag completion when JSON verdict says in progress despite the phrase appearing', async () => {
+    const ctx = makeCtx('```json\n{"mission_complete": false, "mission_failed": false, "summary": "Mission complete criteria not yet met — one objective remains."}\n```');
+    const actResult = { phase: 'act' as const, actionId: 'a1', output: 'Done', success: true };
+    const validation = { phase: 'validate' as const, passed: true, reasoning: 'Good' };
+
+    const result = await runReflect(ctx, actResult, validation);
+    expect(result.missionComplete).toBe(false);
+    expect(result.missionFailed).toBe(false);
+  });
+
   it('detects mission complete', async () => {
     const ctx = makeCtx('All objectives met. Mission complete: true');
     const actResult = { phase: 'act' as const, actionId: 'a1', output: 'Done', success: true };

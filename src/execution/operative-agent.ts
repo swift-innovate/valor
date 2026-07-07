@@ -23,12 +23,22 @@ import type {
   MissionBrief,
   OperativeConfig,
   PhaseResult,
+  ToolAdapter,
 } from './types.js';
 import { nullEngramAdapter } from './types.js';
 
 export interface OperativeOptions {
   persona?: string;
   systemPromptExtra?: string;
+  /** Tool adapter for the Act phase. Absent → Act produces LLM work products only. */
+  tools?: ToolAdapter;
+  /**
+   * Called after each phase completes with its result and the current
+   * iteration index. Used by callers to persist per-phase outcomes
+   * (e.g., folder memory writes) without coupling the loop to a store.
+   * Errors are logged and do not interrupt the loop.
+   */
+  onPhaseResult?: (result: PhaseResult, iteration: number) => void | Promise<void>;
 }
 
 const ROLLING_HISTORY_LIMIT = 8;
@@ -47,6 +57,8 @@ export class OperativeAgent {
   private state: AgentState;
   private mission: MissionBrief | null = null;
   private rollingHistory: ChatMessage[] = [];
+  private tokensIn = 0;
+  private tokensOut = 0;
 
   constructor(
     config: OperativeConfig,
@@ -142,6 +154,15 @@ export class OperativeAgent {
       state: this.state,
       rollingHistory: this.rollingHistory,
       systemPrompt: this.buildSystemPrompt(),
+      tools: this.options.tools,
+      onUsage: (usage: { input_tokens: number; output_tokens: number }) => {
+        this.tokensIn += usage.input_tokens;
+        this.tokensOut += usage.output_tokens;
+        this.state = {
+          ...this.state,
+          tokensBudgetUsed: this.tokensIn + this.tokensOut,
+        };
+      },
     };
 
     const results: PhaseResult[] = [];
@@ -151,6 +172,7 @@ export class OperativeAgent {
     results.push(observation);
     this.appendHistory(observation.rawMessages);
     this.publishSitrep('observe', observation.summary, 'IN_PROGRESS');
+    await this.emitPhaseResult(observation);
 
     // ── Plan ────────────────────────────────────────────────────────────────
     const plan = await runPlan(ctx, observation);
@@ -160,6 +182,7 @@ export class OperativeAgent {
     if (plan.needsEscalation) {
       this.publishSitrep('plan', plan.escalationReason ?? 'Escalation required', 'ESCALATED');
     }
+    await this.emitPhaseResult(plan);
 
     // ── Act ─────────────────────────────────────────────────────────────────
     let actResult;
@@ -180,11 +203,13 @@ export class OperativeAgent {
       this.publishSitrep('act', actResult.output, 'IN_PROGRESS');
     }
     results.push(actResult);
+    await this.emitPhaseResult(actResult);
 
     // ── Validate ────────────────────────────────────────────────────────────
     const validation = await runValidate(ctx, actResult);
     results.push(validation);
     this.publishSitrep('validate', validation.reasoning, 'IN_PROGRESS');
+    await this.emitPhaseResult(validation);
 
     // ── Reflect ─────────────────────────────────────────────────────────────
     const reflection = await runReflect(ctx, actResult, validation);
@@ -197,6 +222,7 @@ export class OperativeAgent {
     } else {
       this.publishSitrep('reflect', reflection.summary, 'IN_PROGRESS');
     }
+    await this.emitPhaseResult(reflection);
 
     // ── Evolve (periodic) ───────────────────────────────────────────────────
     if (shouldRunEvolve(this.state.iterationCount + 1)) {
@@ -205,6 +231,7 @@ export class OperativeAgent {
       if (evolveResult.assessed) {
         this.publishSitrep('evolve', evolveResult.proposals.join('; ') || 'No proposals', 'IN_PROGRESS');
       }
+      await this.emitPhaseResult(evolveResult);
     }
 
     // ── Update state ────────────────────────────────────────────────────────
@@ -280,6 +307,19 @@ export class OperativeAgent {
     return parts.join('\n');
   }
 
+  private async emitPhaseResult(result: PhaseResult): Promise<void> {
+    if (!this.options.onPhaseResult) return;
+    try {
+      await this.options.onPhaseResult(result, this.state.iterationCount);
+    } catch (err) {
+      logger.error('onPhaseResult hook failed', {
+        agent_id: this.config.id,
+        phase: result.phase,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   private setStatus(status: AgentStatus): void {
     const prev = this.state.status;
     this.state = { ...this.state, status, lastActivity: new Date() };
@@ -340,7 +380,7 @@ export class OperativeAgent {
           summary,
           phase,
           iteration: this.state.iterationCount,
-          tokens_used: { input: 0, output: 0 },
+          tokens_used: { input: this.tokensIn, output: this.tokensOut },
           timestamp: new Date().toISOString(),
         },
         metadata: null,

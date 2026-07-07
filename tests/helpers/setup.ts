@@ -5,4 +5,5 @@ process.env.VALOR_DB_PATH = ":memory:";
 process.env.LOG_LEVEL = "error";
 process.env.DISABLED_GATES = "artifact_integrity,oath,vector_checkpoint";
 process.env.VALOR_ALLOW_ROLE_HEADER_FALLBACK = "true";
+process.env.STORE_BACKEND = "sqlite";
 delete process.env.VALOR_AGENT_KEY;

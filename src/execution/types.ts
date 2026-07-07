@@ -1,3 +1,5 @@
+import type { ToolDefinition } from '../providers/types.js';
+
 // ─── Loop phases ────────────────────────────────────────────────────────────
 
 export type LoopPhase = 'observe' | 'plan' | 'act' | 'validate' | 'reflect' | 'evolve';
@@ -100,12 +102,20 @@ export interface PlannedAction {
   requiresCheckpoint: boolean;
 }
 
+export interface ToolCallRecord {
+  tool: string;
+  params: Record<string, unknown>;
+  success: boolean;
+  output: string;
+}
+
 export interface ActResult {
   phase: 'act';
   actionId: string;
   output: string;
   success: boolean;
   error?: string;
+  toolCalls?: ToolCallRecord[];
 }
 
 export interface ValidateResult {
@@ -189,4 +199,6 @@ export interface ToolResult {
 export interface ToolAdapter {
   execute(tool: string, params: Record<string, unknown>): Promise<ToolResult>;
   isEnabled(tool: string): boolean;
+  /** Definitions of the tools this adapter can execute, for advertising to the model. */
+  definitions?(): ToolDefinition[];
 }

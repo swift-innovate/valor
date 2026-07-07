@@ -274,3 +274,54 @@ describe('Mission Loop (runMission)', () => {
     expect(outcome).toBe('escalated');
   });
 });
+
+describe('OperativeAgent — token accounting', () => {
+  it('accumulates provider usage into tokensBudgetUsed', async () => {
+    const agent = new OperativeAgent(testConfig(), mockProvider());
+    agent.assignMission(testMission());
+
+    await agent.runIteration();
+    // 5 phases × (10 input + 5 output) tokens from the mock provider
+    expect(agent.getState().tokensBudgetUsed).toBe(75);
+  });
+
+  it('reports accumulated tokens in sitreps', async () => {
+    const agent = new OperativeAgent(testConfig(), mockProvider());
+    agent.assignMission(testMission());
+
+    const sitreps: EventEnvelope[] = [];
+    subscribe('sitrep.published', (e) => { sitreps.push(e); });
+
+    await agent.runIteration();
+
+    const last = sitreps[sitreps.length - 1]!;
+    const tokens = (last.payload as { tokens_used: { input: number; output: number } }).tokens_used;
+    expect(tokens.input).toBeGreaterThan(0);
+    expect(tokens.output).toBeGreaterThan(0);
+  });
+});
+
+describe('OperativeAgent — onPhaseResult hook', () => {
+  it('invokes the hook once per phase with the iteration index', async () => {
+    const seen: Array<{ phase: string; iteration: number }> = [];
+    const agent = new OperativeAgent(testConfig(), mockProvider(), undefined, {
+      onPhaseResult: (result, iteration) => { seen.push({ phase: result.phase, iteration }); },
+    });
+    agent.assignMission(testMission());
+
+    await agent.runIteration();
+
+    expect(seen.map((s) => s.phase)).toEqual(['observe', 'plan', 'act', 'validate', 'reflect']);
+    expect(seen.every((s) => s.iteration === 0)).toBe(true);
+  });
+
+  it('a throwing hook does not interrupt the loop', async () => {
+    const agent = new OperativeAgent(testConfig(), mockProvider(), undefined, {
+      onPhaseResult: () => { throw new Error('hook boom'); },
+    });
+    agent.assignMission(testMission());
+
+    const results = await agent.runIteration();
+    expect(results.map((r) => r.phase)).toEqual(['observe', 'plan', 'act', 'validate', 'reflect']);
+  });
+});
