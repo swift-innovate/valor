@@ -1,0 +1,1 @@
+[2026-07-06] | Reported "codex and node-telegram-bot-api have zero imports" based on a scan that only covered src/, scripts/, tests/ — gateways/ imports node-telegram-bot-api and it runs in production | Before declaring a dependency dead, grep the ENTIRE repo (including gateways/, deploy/, infrastructure/) AND check launch scripts for runtime-only usage that typecheck can't see.

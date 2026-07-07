@@ -99,3 +99,51 @@
 - [x] 6. Director participation (from_agent_id: "director" special case)
 - [x] 7. Tests (18 cases: full flow, flash dual-publish, filters, limits)
 - [x] 8. Verify + commit (220/220 tests green)
+
+## Phase 10: Folder-Is-The-Agent MVP [COMPLETE]
+
+### Agent 1: Agent Store + Seed Migration
+- [x] `src/store/agent-store.ts` — AgentLoader, AgentWriter, AgentDiscovery, RosterManager
+- [x] `scripts/seed-agents.ts` — ROSTER.md YAML → agent folder structure
+- [x] `tests/store/agent-store.test.ts` (26 tests)
+
+### Agent 2: Mission Store
+- [x] `src/store/mission-store.ts` — MissionLoader, MissionWriter, MissionManager
+- [x] `tests/store/mission-store.test.ts` (30 tests)
+
+### Agent 3: Operative Loop Integration
+- [x] Modify `src/execution/index.ts` — added `executeFolderMission()` alongside SQLite path
+- [x] `tests/execution/folder-integration.test.ts` (11 tests)
+
+### Agent 4: API Routes + CLI + Config
+- [x] `src/config.ts` — added `storeBackend: 'folder' | 'sqlite'`, `agentsDir`, `missionsDir`
+- [x] `src/api/folder-agents.ts` — folder-backed agent CRUD routes (6 endpoints)
+- [x] `src/api/folder-missions.ts` — folder-backed mission CRUD routes (8 endpoints)
+- [x] `src/api/index.ts` — exported new routes
+- [x] `src/index.ts` — mount folder routes when storeBackend === 'folder'
+- [x] `src/cli/index.ts` — CLI commands (agent create/list, mission create/assign/list, roster rebuild, status)
+- [x] `tests/api/folder-routes.test.ts` (22 tests), `tests/cli/commands.test.ts` (18 tests)
+
+### Verification
+- [x] `npm run typecheck` passes (0 errors)
+- [x] `npm test` passes (663/663, 15 skipped, 1 pre-existing NATS-dependent suite)
+
+## Phase: Post-review hardening (2026-07-06)
+
+### Core lane (execution engine)
+- [x] 1. Built-in ToolAdapter (`src/execution/tools.ts`) — filesystem/fetch/shell tools, path-jailed to per-agent workspace, alias mapping from tools.md names
+- [x] 2. Wire tools into Act phase — ReAct-style tool loop with Zod-validated JSON tool calls, freeform fallback
+- [x] 3. Structured termination — JSON verdicts for Validate/Reflect with substring fallback
+- [x] 4. Token accounting — accumulate provider usage into state + real numbers in sitreps
+- [x] 5. Parse tools.md (already parsed by AgentLoader — normalization/aliases live in tools.ts) → config.tools in AgentLoader
+- [x] 6. Phase hooks in OperativeAgent → per-phase folder writes (reflections.md, long-term.md, decisions.md, per-act progress.md)
+- [x] 7. Tests for all of the above (32 new; 695 passed, 15 skipped, 1 pre-existing NATS env failure); full pipeline green
+
+### Hygiene lane (builder, disjoint files)
+- [x] 8. console.* → logger (nats-subscriber, missions-live, sse, nats-state)
+- [x] 9. Session cookie `secure` flag in production
+- [x] 10. Default-credential seeding hardened (env-provided or random+logged)
+- [x] 11. Removed codex + pnpm-lock.yaml + pnpm config (npm canonical). node-telegram-bot-api KEPT — not dead: gateways/telegram/index.ts imports it and start-valor.sh launches it in production. Consolidation with the grammy bot (src/telegram/) is a separate product decision.
+
+### Deferred (needs design decision)
+- [ ] storeBackend exclusivity — genuine fork: folder-as-canonical vs SQLite-as-runtime-canonical; affects Director path
